@@ -1,0 +1,11 @@
+# Ensure consistent line endings across platforms.
+# Bash/shell scripts must use LF to run correctly under bash on Windows (Git Bash/WSL)
+*.sh   text eol=lf
+*.bash text eol=lf
+*.zsh  text eol=lf
+
+# Windows command scripts typically use CRLF
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+
+

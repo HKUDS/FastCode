@@ -1,0 +1,59 @@
+# Core Dependencies
+python-dotenv
+pyyaml
+click
+
+# Repository Management
+gitpython
+
+# Code Parsing
+tree-sitter
+tree-sitter-python
+tree-sitter-javascript
+tree-sitter-typescript
+tree-sitter-java
+tree-sitter-go
+tree-sitter-c
+tree-sitter-cpp
+tree-sitter-rust
+tree-sitter-c-sharp
+libcst
+
+# Embeddings & Vector Store
+sentence-transformers
+faiss-cpu
+chromadb
+
+# Search & Retrieval
+rank-bm25
+networkx
+
+# LLM Integration
+openai
+anthropic
+tiktoken
+
+# API
+fastapi
+uvicorn
+pydantic
+flask
+flask-cors
+python-multipart
+
+# Utilities
+tqdm
+numpy
+pandas
+pathspec
+
+# Caching
+diskcache
+redis
+
+# Testing
+pytest
+pytest-asyncio
+pytest-cov
+
+

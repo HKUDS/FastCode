@@ -1,0 +1,1077 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FastCode - Code Repository Analysis</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/FastCode.svg">
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+        
+        /* General Utilities */
+        .line-clamp-1 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1; }
+        .transition-all { transition: all 0.3s ease; }
+        textarea { font-family: inherit; }
+        input[type="file"] { display: none; }
+        
+        /* Message Content Typography */
+        .message-content { 
+            word-break: break-word; 
+            overflow-wrap: anywhere; 
+            font-size: 0.95rem; 
+            line-height: 1.6; 
+            color: #1f2937;
+        }
+        
+        /* Paragraph spacing */
+        .message-content p { margin: 0.5rem 0; }
+        
+        /* Lists */
+        .message-content ul, .message-content ol { margin: 0.5rem 0 0.5rem 1.5rem; }
+        .message-content li { margin: 0.25rem 0; }
+        .message-content ul { list-style-type: disc; }
+        .message-content ol { list-style-type: decimal; }
+
+        /* --- HEADER STYLING --- */
+        .message-content h1,
+        .message-content h2,
+        .message-content h3 {
+            font-weight: 700;
+            line-height: 1.4;
+            margin: 1.5rem 0 0.75rem;
+            color: #111827;
+        }
+
+        .message-content h1 { font-size: 1.25rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.5rem; }
+        .message-content h2 { font-size: 1.15rem; }
+        .message-content h3 { font-size: 1.05rem; }
+
+        .message-content strong, .message-content b { font-weight: 700; color: #111827; }
+        .message-content a { color: #2563eb; text-decoration: underline; text-underline-offset: 2px; }
+        
+        /* Blockquotes */
+        .message-content blockquote {
+            border-left: 4px solid #e5e7eb;
+            padding: 0.5rem 0 0.5rem 1rem;
+            color: #4b5563;
+            font-style: italic;
+            margin: 1rem 0;
+            background: #f9fafb;
+        }
+        
+        /* --- TABLE STYLING --- */
+        .message-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+            display: block;
+            overflow-x: auto;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+        }
+        
+        .message-content th,
+        .message-content td {
+            padding: 0.75rem 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        /* Fix for large line spacing in tables: Remove margins from p tags inside cells */
+        .message-content td p { margin: 0; }
+        
+        .message-content th {
+            background: #f9fafb;
+            font-weight: 600;
+            color: #374151;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+        
+        .message-content tr:last-child td { border-bottom: none; }
+        .message-content tr:nth-child(even) { background: #fcfcfc; }
+
+        /* --- CODE BLOCK STYLING --- */
+        /* Wrapper for the IDE-like window */
+        .code-wrapper {
+            margin: 1rem 0;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            background: #0f172a; /* Dark background base */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Header Bar */
+        .code-header {
+            background: #f3f4f6;
+            padding: 0.5rem 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        /* Language Label */
+        .code-lang {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: #4b5563;
+            text-transform: uppercase;
+        }
+
+        /* Copy Button */
+        .copy-btn {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            font-size: 0.75rem;
+            color: #6b7280;
+            cursor: pointer;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            transition: all 0.2s;
+        }
+        .copy-btn:hover { background: #e5e7eb; color: #1f2937; }
+
+        /* Pre Block (Actual Code) */
+        .message-content pre {
+            background: #0f172a; /* Slate-900 */
+            color: #e2e8f0;
+            padding: 1rem;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all;
+            overflow-x: auto;
+            margin: 0;
+            border: none;
+        }
+
+        /* Inline Code */
+        .message-content code {
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        }
+        
+        /* Inline code styling (not inside pre) */
+        .message-content :not(pre) > code {
+            background: #f1f5f9;
+            color: #ea580c; /* Orange-600 */
+            padding: 0.15rem 0.35rem;
+            border-radius: 0.25rem;
+            font-size: 0.85em;
+            border: 1px solid #e2e8f0;
+        }
+
+        /* Reset for code inside pre */
+        .message-content pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+            border: none;
+            font-size: inherit;
+        }
+
+        /* UI Layout Classes */
+        .message-bubble { max-width: min(100%, 85ch); width: fit-content; }
+        
+        .message-card {
+            border-radius: 0.75rem;
+            border: 1px solid #e5e7eb;
+            background: #fff;
+            overflow: hidden;
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+        }
+        
+        .message-card .header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1.25rem;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+            font-weight: 600;
+            color: #374151;
+            font-size: 0.95rem;
+        }
+        
+        .message-card .body { padding: 1.25rem; }
+        
+        .spinner {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-top-color: #fff;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="h-screen overflow-hidden bg-white text-gray-800">
+<div class="flex h-screen bg-white">
+    <div id="sidebar" class="w-80 bg-gray-50 border-r border-gray-200 flex flex-col transition-all duration-300">
+        <div class="p-4 border-b border-gray-200">
+            <div class="flex items-center justify-between mb-4">
+                <h1 class="text-xl font-bold text-gray-800 flex items-center gap-2">
+                    <img src="/assets/FastCode.svg" alt="FastCode" class="w-6 h-6" />
+                    FastCode
+                </h1>
+                <span id="status-pill" class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-gray-200 text-gray-600">
+                    <span id="status-dot" class="w-2 h-2 rounded-full bg-red-500"></span>
+                    <span id="status-text">Not ready</span>
+                </span>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="toggleAddRepo()" class="flex-1 bg-teal-600 text-white px-3 py-2 rounded-lg hover:bg-teal-700 transition flex items-center justify-center gap-2 text-sm font-medium shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Index Repo
+                </button>
+                <button onclick="newChat()" class="flex-1 bg-white border border-gray-300 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 text-sm font-medium shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+                    </svg>
+                    New Chat
+                </button>
+            </div>
+        </div>
+
+        <div class="flex border-b border-gray-200 bg-white">
+            <button onclick="switchTab('repos')" id="tab-repos" class="flex-1 px-4 py-3 text-sm font-medium transition text-teal-600 border-b-2 border-teal-600">
+                Repositories
+            </button>
+            <button onclick="switchTab('chat')" id="tab-chat" class="flex-1 px-4 py-3 text-sm font-medium transition text-gray-500 hover:text-gray-700">
+                History
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-3">
+            <div id="repos-content" class="space-y-3">
+                <div class="relative">
+                    <svg class="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                    </svg>
+                    <input
+                        type="text"
+                        id="repo-search"
+                        placeholder="Filter repositories..."
+                        class="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-teal-500 text-sm bg-white"
+                        oninput="filterRepos()"
+                    />
+                </div>
+
+                <div class="text-xs text-gray-500 px-1" id="status-line">Checking system status...</div>
+                <div id="repos-list" class="space-y-2"></div>
+
+                <div class="pt-3 border-t border-gray-200 flex gap-2">
+                    <button onclick="loadSelectedRepos()" class="flex-1 px-3 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition text-sm disabled:opacity-50 shadow-sm" id="load-selected-btn">
+                        Load Selected
+                    </button>
+                    <button onclick="deleteSelectedRepos()" class="px-3 py-2 bg-white border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition text-sm shadow-sm" id="delete-selected-btn" title="Delete selected repos">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                    <button onclick="refreshStatus()" class="px-3 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition text-sm shadow-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                    </button>
+                </div>
+            </div>
+
+            <div id="chat-content" class="hidden space-y-2">
+                <div id="session-list" class="divide-y divide-gray-100"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex-1 flex flex-col bg-white">
+        <div class="border-b border-gray-200 px-6 py-3 flex items-center justify-between bg-white/80 backdrop-blur-sm sticky top-0 z-10">
+            <div class="flex items-center gap-3">
+                <button onclick="toggleSidebar()" class="p-2 hover:bg-gray-100 rounded-lg transition text-gray-500">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                </button>
+                <div>
+                    <div class="text-xs font-medium text-gray-400 uppercase tracking-wide">Context</div>
+                    <div id="selected-repos" class="flex gap-2 flex-wrap text-sm text-gray-600 font-medium">None selected</div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <span class="text-xs text-gray-400 font-mono" id="session-label">ID: -</span>
+                <button onclick="showSummary()" class="text-gray-500 hover:text-teal-600 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div id="add-repo-panel" class="bg-gray-50 border-b border-gray-200 p-6 hidden">
+            <div class="max-w-3xl mx-auto">
+                <div class="flex justify-center mb-6">
+                    <div class="bg-white rounded-lg p-1 shadow-sm border border-gray-200 inline-flex">
+                        <button onclick="setRepoMode('url')" id="mode-url" class="px-4 py-2 rounded text-sm font-medium transition bg-teal-100 text-teal-700">URL</button>
+                        <button onclick="setRepoMode('upload')" id="mode-upload" class="px-4 py-2 rounded text-sm font-medium transition text-gray-600 hover:bg-gray-50">Upload ZIP</button>
+                    </div>
+                </div>
+
+                <div id="url-mode" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                    <textarea id="repo-urls" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" rows="3" placeholder="https://github.com/owner/repo" oninput="updateUrlCount()"></textarea>
+                    <div class="flex justify-between mt-4">
+                        <span class="text-xs text-gray-500 mt-2" id="url-count">0 repos</span>
+                        <div class="flex gap-2">
+                            <button onclick="toggleAddRepo()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm">Cancel</button>
+                            <button onclick="startIndexing()" id="index-url-btn" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm disabled:opacity-50" disabled>Index</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="upload-mode" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hidden">
+                    <label class="block border-2 border-dashed border-gray-300 rounded-lg p-8 text-center cursor-pointer hover:border-teal-400 hover:bg-teal-50 transition">
+                        <input type="file" id="file-upload" multiple accept=".zip" onchange="handleFileUpload(event)"/>
+                        <span class="text-sm text-gray-600">Click to upload ZIP files</span>
+                    </label>
+                    <div id="uploaded-files" class="mt-4 text-sm text-gray-600 hidden"></div>
+                    <div class="flex justify-end gap-2 mt-4">
+                        <button onclick="toggleAddRepo()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm">Cancel</button>
+                        <button onclick="startIndexing()" id="index-upload-btn" class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 text-sm disabled:opacity-50" disabled>Index</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 sm:p-6 bg-white" id="chat-area">
+            <div class="max-w-4xl mx-auto space-y-6" id="messages">
+                <div class="text-center py-10">
+                    <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-teal-50 text-teal-600 mb-4">
+                        <img src="/assets/FastCode.svg" alt="FastCode" class="w-10 h-10" />
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900">FastCode 2.0</h3>
+                    <p class="text-gray-500 mt-1 max-w-sm mx-auto">Select a repository from the sidebar to begin asking questions.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="border-t border-gray-200 p-4 bg-white">
+            <div class="max-w-4xl mx-auto">
+                <div class="relative rounded-xl border border-gray-300 shadow-sm focus-within:ring-2 focus-within:ring-teal-500 focus-within:border-teal-500 transition-all bg-white">
+                    <textarea
+                        id="message-input"
+                        placeholder="Ask a question about the code..."
+                        class="w-full px-4 py-3 bg-transparent border-none focus:ring-0 focus:outline-none resize-none text-sm max-h-40"
+                        rows="1"
+                        disabled
+                    ></textarea>
+                    <div class="px-3 pb-2 flex items-center justify-between">
+                        <button onclick="toggleChatMode()" id="chat-mode-toggle" class="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-100 text-xs text-gray-500 transition">
+                            <div class="w-8 h-4 bg-gray-200 rounded-full relative transition-colors" id="chat-mode-track">
+                                <div class="w-3 h-3 bg-white rounded-full absolute top-0.5 left-0.5 transition-transform shadow-sm" id="chat-mode-knob"></div>
+                            </div>
+                            <span id="chat-mode-label">Single-turn</span>
+                        </button>
+                        <button onclick="sendMessage()" id="send-btn" class="bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm" disabled>
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="summary-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden backdrop-blur-sm">
+    <div class="bg-white rounded-xl shadow-2xl w-full max-w-2xl mx-4 max-h-[80vh] flex flex-col">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+            <h3 class="font-semibold text-gray-800">Repository Summary</h3>
+            <button onclick="closeSummary()" class="text-gray-400 hover:text-gray-600 transition">&times;</button>
+        </div>
+        <div class="p-6 overflow-y-auto bg-gray-50 flex-1">
+            <pre id="summary-content" class="text-xs font-mono text-gray-600 whitespace-pre-wrap"></pre>
+        </div>
+    </div>
+</div>
+
+<div id="toast" class="fixed top-5 right-5 z-50 transition-all duration-300 transform translate-y-[-150%] opacity-0"></div>
+
+<script>
+    // --- APP STATE ---
+    const state = {
+        selectedRepos: [],
+        availableRepos: [],
+        ready: false,
+        sessionId: null,
+        isSending: false,
+        isIndexing: false,
+        chatMode: false, // false = single, true = multi
+        messages: []
+    };
+
+    // --- MARKDOWN SETUP ---
+    const mdRenderer = new marked.Renderer();
+
+    // Custom Code Block Renderer with IDE-like window styling
+    mdRenderer.code = (code, infostring) => {
+        const lang = (infostring || 'text').trim().split(/\s+/)[0];
+        const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const uniqueId = 'code-' + Math.random().toString(36).substr(2, 9);
+        
+        return `
+            <div class="code-wrapper">
+                <div class="code-header">
+                    <div class="code-lang">
+                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 7l4 4-4 4M7 17l-4-4 4-4" />
+                        </svg>
+                        <span>${lang}</span>
+                    </div>
+                    <button class="copy-btn" onclick="copyToClipboard('${uniqueId}')">
+                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        Copy
+                    </button>
+                </div>
+                <pre><code id="${uniqueId}" class="language-${lang}">${escaped}</code></pre>
+            </div>
+        `;
+    };
+
+    marked.setOptions({ renderer: mdRenderer, gfm: true, breaks: true });
+
+    // --- INITIALIZATION ---
+    document.addEventListener('DOMContentLoaded', () => {
+        refreshStatus();
+        setInterval(refreshStatus, 8000);
+        
+        // Auto-resize textarea
+        const input = document.getElementById('message-input');
+        input.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 160) + 'px';
+        });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        loadSessions();
+    });
+
+    // --- CORE FUNCTIONS ---
+    async function refreshStatus() {
+        try {
+            const res = await fetch('/api/status');
+            const data = await res.json();
+            state.ready = data.repo_indexed;
+            state.availableRepos = data.available_repositories || [];
+            updateUIStatus();
+            renderRepoList();
+        } catch (e) { console.error(e); }
+    }
+
+    function updateUIStatus() {
+        const dot = document.getElementById('status-dot');
+        const text = document.getElementById('status-text');
+        const pill = document.getElementById('status-pill');
+        const line = document.getElementById('status-line');
+        
+        if (state.ready) {
+            dot.className = "w-2 h-2 rounded-full bg-green-500";
+            text.textContent = "Ready";
+            pill.className = "inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-green-50 text-green-700";
+            line.textContent = `${state.availableRepos.length} repositories indexed.`;
+        } else {
+            dot.className = "w-2 h-2 rounded-full bg-amber-500";
+            text.textContent = "Not Ready";
+            pill.className = "inline-flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-full bg-amber-50 text-amber-700";
+            line.textContent = state.availableRepos.length > 0 ? "Repositories found on disk." : "No repositories found.";
+        }
+        
+        const canSend = state.ready && state.selectedRepos.length > 0 && !state.isSending;
+        document.getElementById('message-input').disabled = !canSend;
+        document.getElementById('send-btn').disabled = !canSend;
+    }
+
+    function renderRepoList(filter = '') {
+        const list = document.getElementById('repos-list');
+        list.innerHTML = '';
+        const filtered = state.availableRepos.filter(r => r.name.toLowerCase().includes(filter.toLowerCase()));
+        
+        if (!filtered.length) {
+            list.innerHTML = '<div class="text-center py-4 text-xs text-gray-400">No matching repositories</div>';
+            return;
+        }
+
+        filtered.forEach(repo => {
+            const isSelected = state.selectedRepos.includes(repo.name);
+            const el = document.createElement('div');
+            el.className = `p-3 rounded-lg border cursor-pointer transition flex items-center justify-between group ${isSelected ? 'border-teal-500 bg-teal-50' : 'border-gray-200 hover:border-teal-300 bg-white'}`;
+            el.onclick = () => toggleRepo(repo.name);
+            
+            el.innerHTML = `
+                <div class="flex items-center gap-3 overflow-hidden">
+                    <div class="${isSelected ? 'text-teal-600' : 'text-gray-400 group-hover:text-teal-500'}">>
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="text-sm font-medium text-gray-900 truncate">${repo.name}</div>
+                        <div class="text-xs text-gray-500">${repo.file_count} files • ${(repo.size_mb||0).toFixed(1)} MB</div>
+                    </div>
+                </div>
+                ${isSelected ? '<svg class="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' : ''}
+            `;
+            list.appendChild(el);
+        });
+    }
+
+    function toggleRepo(name) {
+        if (state.selectedRepos.includes(name)) state.selectedRepos = state.selectedRepos.filter(r => r !== name);
+        else state.selectedRepos.push(name);
+        
+        renderRepoList(document.getElementById('repo-search').value);
+        
+        // Update header badges
+        const container = document.getElementById('selected-repos');
+        if (!state.selectedRepos.length) container.innerHTML = '<span class="text-gray-400 italic">None selected</span>';
+        else {
+            container.innerHTML = state.selectedRepos.map(r =>
+                `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-teal-100 text-teal-800 text-xs border border-teal-200">
+                    ${r} <button onclick="event.stopPropagation(); toggleRepo('${r}')" class="hover:text-teal-900">&times;</button>
+                </span>`
+            ).join('');
+        }
+        updateUIStatus();
+    }
+
+    async function loadSelectedRepos() {
+        if (!state.selectedRepos.length) return showToast('Select a repository first', 'error');
+        try {
+            const res = await fetch('/api/load-repositories', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ repo_names: state.selectedRepos })
+            });
+            if (res.ok) {
+                showToast('Repositories loaded', 'success');
+                state.ready = true;
+                updateUIStatus();
+            }
+        } catch(e) { showToast('Load failed', 'error'); }
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('message-input');
+        const question = input.value.trim();
+        if (!question || !state.ready) return;
+
+        if (!state.sessionId) await startNewSession();
+
+        state.isSending = true;
+        updateUIStatus();
+
+        // Optimistic UI
+        addMessage({ role: 'user', content: question });
+        input.value = '';
+        input.style.height = 'auto';
+
+        // Create streaming message container
+        const streamId = 'stream-' + Date.now();
+        const msgsDiv = document.getElementById('messages');
+        const streamDiv = document.createElement('div');
+        streamDiv.id = streamId;
+        streamDiv.className = "flex gap-4";
+        streamDiv.innerHTML = `
+            <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center shadow-sm">
+                <svg class="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+            </div>
+            <div class="message-card bg-white border border-gray-200 rounded-xl rounded-tl-sm p-6 shadow-sm w-full max-w-3xl">
+                <div class="message-content text-gray-800" id="${streamId}-content">
+                    <span class="flex items-center gap-2 text-gray-500 text-sm">
+                        <span class="spinner bg-gray-400" style="width:12px;height:12px;border-width:2px;border-color:rgba(0,0,0,0.1);border-top-color:#666"></span>
+                        Retrieving context...
+                    </span>
+                </div>
+                <div id="${streamId}-sources" class="hidden mt-4 pt-3 border-t border-gray-100">
+                    <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sources</div>
+                    <div class="flex flex-wrap gap-2" id="${streamId}-sources-list"></div>
+                </div>
+            </div>`;
+        msgsDiv.appendChild(streamDiv);
+
+        const scrollParent = document.getElementById('chat-area');
+        scrollParent.scrollTo({ top: scrollParent.scrollHeight, behavior: 'smooth' });
+
+        let fullContent = '';
+        let sources = [];
+        let renderTimeout = null;
+
+        // Auto-scroll control: stop auto-scroll if user manually scrolls up
+        let userScrolledAway = false;
+        let lastScrollTop = scrollParent.scrollTop;
+        const scrollThreshold = 100; // pixels from bottom to consider "at bottom"
+
+        function isNearBottom() {
+            return scrollParent.scrollHeight - scrollParent.scrollTop - scrollParent.clientHeight < scrollThreshold;
+        }
+
+        function handleUserScroll() {
+            const currentScrollTop = scrollParent.scrollTop;
+            // User scrolled up manually (not programmatic scroll down)
+            if (currentScrollTop < lastScrollTop && !isNearBottom()) {
+                userScrolledAway = true;
+            }
+            // User scrolled back to bottom - re-enable auto-scroll
+            if (isNearBottom()) {
+                userScrolledAway = false;
+            }
+            lastScrollTop = currentScrollTop;
+        }
+
+        scrollParent.addEventListener('scroll', handleUserScroll);
+
+        function autoScroll() {
+            if (!userScrolledAway) {
+                scrollParent.scrollTo({ top: scrollParent.scrollHeight, behavior: 'smooth' });
+            }
+        }
+
+        try {
+            const response = await fetch('/api/query-stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    question,
+                    repo_filter: state.selectedRepos,
+                    multi_turn: state.chatMode,
+                    session_id: state.sessionId
+                })
+            });
+
+            if (!response.ok) {
+                const err = await response.json();
+                throw new Error(err.detail || 'Request failed');
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            const contentEl = document.getElementById(`${streamId}-content`);
+            const sourcesEl = document.getElementById(`${streamId}-sources`);
+            const sourcesListEl = document.getElementById(`${streamId}-sources-list`);
+
+            // Throttled render function
+            function scheduleRender() {
+                if (renderTimeout) return;
+                renderTimeout = setTimeout(() => {
+                    renderTimeout = null;
+                    contentEl.innerHTML = marked.parse(fullContent);
+                    autoScroll();
+                }, 50);
+            }
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                const text = decoder.decode(value, { stream: true });
+                const lines = text.split('\n');
+
+                for (const line of lines) {
+                    if (!line.startsWith('data: ')) continue;
+                    const jsonStr = line.slice(6).trim();
+                    if (!jsonStr) continue;
+
+                    try {
+                        const event = JSON.parse(jsonStr);
+
+                        if (event.type === 'status') {
+                            if (event.status === 'retrieving') {
+                                contentEl.innerHTML = `<span class="flex items-center gap-2 text-gray-500 text-sm">
+                                    <span class="spinner bg-gray-400" style="width:12px;height:12px;border-width:2px;border-color:rgba(0,0,0,0.1);border-top-color:#666"></span>
+                                    Retrieving context...
+                                </span>`;
+                            } else if (event.status === 'generating') {
+                                contentEl.innerHTML = `<span class="flex items-center gap-2 text-gray-500 text-sm">
+                                    <span class="spinner bg-gray-400" style="width:12px;height:12px;border-width:2px;border-color:rgba(0,0,0,0.1);border-top-color:#666"></span>
+                                    Generating response...
+                                </span>`;
+                                if (event.sources) sources = event.sources;
+                                if (event.session_id) {
+                                    state.sessionId = event.session_id;
+                                    updateSessionDisplay();
+                                }
+                            }
+                        } else if (event.type === 'chunk') {
+                            fullContent += event.content;
+                            scheduleRender();
+                        } else if (event.type === 'done') {
+                            // Final render
+                            if (renderTimeout) {
+                                clearTimeout(renderTimeout);
+                                renderTimeout = null;
+                            }
+                            contentEl.innerHTML = marked.parse(fullContent);
+
+                            // Update sources
+                            if (event.sources && event.sources.length) sources = event.sources;
+                            if (sources.length) {
+                                sourcesListEl.innerHTML = sources.map(s => {
+                                    const repo = s.repository || s.repo_name || '';
+                                    const file = s.display || s.file || s.name || 'file';
+                                    const lineText = s.lines ? ` (${s.lines})` : '';
+                                    const base = repo && !String(file).startsWith(`${repo}:`) ? `${repo}: ${file}` : file;
+                                    const label = `${base}${lineText}`;
+                                    return `<span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200 font-mono">${escapeHtml(label)}</span>`;
+                                }).join('');
+                                sourcesEl.classList.remove('hidden');
+                            }
+
+                            if (event.session_id) {
+                                state.sessionId = event.session_id;
+                                updateSessionDisplay();
+                            }
+                        } else if (event.type === 'error') {
+                            throw new Error(event.error);
+                        }
+                    } catch (parseErr) {
+                        console.warn('Failed to parse SSE event:', parseErr);
+                    }
+                }
+            }
+
+        } catch (e) {
+            const contentEl = document.getElementById(`${streamId}-content`);
+            if (contentEl) {
+                contentEl.innerHTML = `<span class="text-red-500">Error: ${escapeHtml(e.message)}</span>`;
+            }
+        } finally {
+            // Clean up scroll listener
+            scrollParent.removeEventListener('scroll', handleUserScroll);
+            if (renderTimeout) {
+                clearTimeout(renderTimeout);
+            }
+            state.isSending = false;
+            updateUIStatus();
+        }
+    }
+
+    function addMessage(msg) {
+        const container = document.getElementById('messages');
+        const isUser = msg.role === 'user';
+        
+        const div = document.createElement('div');
+        div.className = `flex gap-4 ${isUser ? 'justify-end' : ''}`;
+        
+        if (isUser) {
+            div.innerHTML = `
+                <div class="message-bubble bg-teal-600 text-white px-5 py-3 rounded-2xl rounded-tr-sm shadow-sm text-sm leading-relaxed">
+                    ${escapeHtml(msg.content).replace(/\n/g, '<br>')}
+                </div>
+            `;
+        } else {
+            // Assistant Message
+            let sourcesHtml = '';
+            if (msg.sources && msg.sources.length) {
+                sourcesHtml = `
+                <div class="mt-4 pt-3 border-t border-gray-100">
+                    <div class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sources</div>
+                    <div class="flex flex-wrap gap-2">
+                        ${msg.sources.map(s => {
+                            const repo = s.repository || s.repo_name || '';
+                            const file = s.display || s.file || s.name || 'file';
+                            // const lines = s.lines || '';
+                            // const label = repo && !String(file).startsWith(`${repo}:`) ? `${repo}: ${file}` : file;
+                            const lineText = s.lines ? ` (${s.lines})` : '';
+                            const base = repo && !String(file).startsWith(`${repo}:`) ? `${repo}: ${file}` : file;
+                            const label = `${base}${lineText}`;
+                            return `<span class="px-2 py-1 bg-gray-100 text-gray-600 text-xs rounded border border-gray-200 font-mono">${escapeHtml(label)}</span>`;
+                        }).join('')}
+                    </div>
+                </div>`;
+            }
+
+            div.innerHTML = `
+                <div class="flex-shrink-0 w-8 h-8 rounded-full bg-white border border-gray-200 flex items-center justify-center shadow-sm">
+                    <svg class="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+                </div>
+                <div class="message-card bg-white border border-gray-200 rounded-xl rounded-tl-sm p-6 shadow-sm w-full max-w-3xl">
+                    <div class="message-content text-gray-800">
+                        ${msg.role === 'system' ? `<span class="text-red-500">${msg.content}</span>` : marked.parse(msg.content)}
+                    </div>
+                    ${sourcesHtml}
+                </div>
+            `;
+        }
+        
+        container.appendChild(div);
+        
+        // Scroll to new message
+        const scrollParent = document.getElementById('chat-area');
+        scrollParent.scrollTo({ top: scrollParent.scrollHeight, behavior: 'smooth' });
+    }
+
+    // --- UTILS ---
+    function toggleChatMode() {
+        state.chatMode = !state.chatMode;
+        const knob = document.getElementById('chat-mode-knob');
+        const track = document.getElementById('chat-mode-track');
+        const label = document.getElementById('chat-mode-label');
+
+        if (state.chatMode) {
+            knob.classList.add('translate-x-full');
+            track.classList.replace('bg-gray-200', 'bg-teal-600');
+            label.textContent = 'Multi-turn';
+        } else {
+            knob.classList.remove('translate-x-full');
+            track.classList.replace('bg-teal-600', 'bg-gray-200');
+            label.textContent = 'Single-turn';
+        }
+    }
+
+    function toggleSidebar() {
+        const sb = document.getElementById('sidebar');
+        sb.classList.toggle('w-80');
+        sb.classList.toggle('w-0');
+        sb.classList.toggle('opacity-0');
+        sb.classList.toggle('overflow-hidden');
+    }
+
+    function copyToClipboard(id) {
+        const text = document.getElementById(id).innerText;
+        navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard', 'success'));
+    }
+
+    let toastTimeout;
+    function showToast(msg, type='info') {
+        const t = document.getElementById('toast');
+        // Clear existing timeout to avoid overlap
+        if (toastTimeout) clearTimeout(toastTimeout);
+        
+        // Define base classes that don't change
+        const base = "fixed top-5 right-5 z-50 px-4 py-3 rounded shadow-lg text-sm font-medium transition-all duration-300 transform";
+        // Define color based on type
+        const color = type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-800 text-white';
+        
+        // Reset to visible state
+        t.className = `${base} ${color} translate-y-0 opacity-100`;
+        t.textContent = msg;
+        
+        // Schedule hide
+        toastTimeout = setTimeout(() => {
+            // Explicitly switch to hidden state
+            t.className = `${base} ${color} translate-y-[-150%] opacity-0`;
+        }, 2000);
+    }
+    
+    function escapeHtml(text) {
+        if (!text) return text;
+        return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+    }
+
+    async function startNewSession() {
+        try {
+            const res = await fetch('/api/new-session', { method: 'POST' });
+            const data = await res.json();
+            state.sessionId = data.session_id;
+            updateSessionDisplay();
+            return data.session_id;
+        } catch (e) { console.error(e); }
+    }
+    
+    function updateSessionDisplay() {
+        document.getElementById('session-label').textContent = state.sessionId ? `ID: ${state.sessionId}` : '';
+    }
+    
+    function filterRepos() { renderRepoList(document.getElementById('repo-search').value); }
+    
+    function toggleAddRepo() {
+        document.getElementById('add-repo-panel').classList.toggle('hidden');
+    }
+
+    // Tabs
+    function switchTab(tab) {
+        document.getElementById('repos-content').classList.toggle('hidden', tab !== 'repos');
+        document.getElementById('chat-content').classList.toggle('hidden', tab !== 'chat');
+
+        const btnRepos = document.getElementById('tab-repos');
+        const btnChat = document.getElementById('tab-chat');
+
+        if (tab === 'repos') {
+            btnRepos.className = "flex-1 px-4 py-3 text-sm font-medium transition text-teal-600 border-b-2 border-teal-600";
+            btnChat.className = "flex-1 px-4 py-3 text-sm font-medium transition text-gray-500 hover:text-gray-700";
+        } else {
+            btnRepos.className = "flex-1 px-4 py-3 text-sm font-medium transition text-gray-500 hover:text-gray-700";
+            btnChat.className = "flex-1 px-4 py-3 text-sm font-medium transition text-teal-600 border-b-2 border-teal-600";
+            loadSessions();
+        }
+    }
+    
+    // Session History
+    async function loadSessions() {
+        try {
+            const res = await fetch('/api/sessions');
+            const data = await res.json();
+            const list = document.getElementById('session-list');
+            list.innerHTML = '';
+            if(!data.sessions?.length) {
+                list.innerHTML = '<div class="text-center py-8 text-xs text-gray-400">No chat history</div>';
+                return;
+            }
+            data.sessions.forEach(s => {
+                const d = document.createElement('div');
+                d.className = "p-3 hover:bg-gray-50 cursor-pointer flex justify-between items-center group";
+                d.innerHTML = `
+                    <div class="flex-1 min-w-0" onclick="loadSession('${s.session_id}')">
+                        <div class="text-sm font-medium text-gray-700 truncate">${escapeHtml(s.title || 'Session ' + s.session_id)}</div>
+                        <div class="text-xs text-gray-400">${new Date((s.last_updated || s.created)*1000).toLocaleString()}</div>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">${s.total_turns} turns</span>
+                        <button onclick="event.stopPropagation(); deleteSession('${s.session_id}')" class="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-500 transition opacity-0 group-hover:opacity-100" title="Delete session">
+                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(d);
+            });
+        } catch(e) {}
+    }
+
+    async function loadSession(id) {
+        try {
+            const res = await fetch(`/api/session/${id}`);
+            const data = await res.json();
+            state.sessionId = id;
+            updateSessionDisplay();
+            
+            // Clear current messages
+            document.getElementById('messages').innerHTML = '';
+            
+            // Rehydrate
+            const history = data.history || [];
+            history.sort((a,b) => (a.turn_number||0) - (b.turn_number||0));
+            
+            history.forEach(turn => {
+                if(turn.query) addMessage({ role: 'user', content: turn.query });
+                if(turn.answer) addMessage({ role: 'assistant', content: turn.answer, sources: turn.retrieved_elements });
+            });
+            switchTab('repos'); // Go back to view
+        } catch(e) {}
+    }
+    
+    function newChat() {
+        state.sessionId = null;
+        state.messages = [];
+        document.getElementById('messages').innerHTML = `
+            <div class="text-center py-10">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-teal-50 text-teal-600 mb-4">
+                    <img src="/assets/FastCode.svg" alt="FastCode" class="w-6 h-6" />
+                </div>
+                <h3 class="text-lg font-medium text-gray-900">FastCode 2.0</h3>
+                <p class="text-gray-500 mt-1 max-w-sm mx-auto">Start a new conversation.</p>
+            </div>
+        `;
+        updateSessionDisplay();
+        startNewSession();
+    }
+    
+    function setRepoMode(m) {
+        document.getElementById('url-mode').classList.toggle('hidden', m!=='url');
+        document.getElementById('upload-mode').classList.toggle('hidden', m!=='upload');
+        document.getElementById('mode-url').className = m==='url' ? "px-4 py-2 rounded text-sm font-medium transition bg-teal-100 text-teal-700" : "px-4 py-2 rounded text-sm font-medium transition text-gray-600 hover:bg-gray-50";
+        document.getElementById('mode-upload').className = m==='upload' ? "px-4 py-2 rounded text-sm font-medium transition bg-teal-100 text-teal-700" : "px-4 py-2 rounded text-sm font-medium transition text-gray-600 hover:bg-gray-50";
+    }
+    
+    function updateUrlCount() {
+        const c = document.getElementById('repo-urls').value.split('\n').filter(x=>x.trim()).length;
+        document.getElementById('url-count').innerText = `${c} repos`;
+        document.getElementById('index-url-btn').disabled = c === 0;
+    }
+    
+    async function startIndexing() {
+        if(state.isIndexing) return;
+        state.isIndexing = true;
+        const btn = document.getElementById(document.getElementById('url-mode').classList.contains('hidden') ? 'index-upload-btn' : 'index-url-btn');
+        btn.disabled = true;
+        btn.innerText = 'Indexing...';
+        
+        try {
+            if(!document.getElementById('url-mode').classList.contains('hidden')) {
+                const sources = document.getElementById('repo-urls').value.split('\n').filter(x=>x.trim()).map(x=>({source:x.trim(), is_url:true}));
+                await fetch('/api/index-multiple', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({sources})});
+            } else {
+                 // Upload logic handles elsewhere or here
+                 const files = document.getElementById('file-upload').files;
+                 for(let f of files) {
+                     const fd = new FormData(); fd.append('file', f);
+                     await fetch('/api/upload-and-index', {method:'POST', body:fd});
+                 }
+            }
+            showToast('Indexing complete', 'success');
+            toggleAddRepo();
+            refreshStatus();
+        } catch(e) {
+            showToast('Indexing failed', 'error');
+        } finally {
+            state.isIndexing = false;
+            btn.innerText = 'Index';
+        }
+    }
+    
+    function handleFileUpload(e) {
+        const c = e.target.files.length;
+        const d = document.getElementById('uploaded-files');
+        d.classList.remove('hidden');
+        d.innerText = `${c} files selected`;
+        document.getElementById('index-upload-btn').disabled = c===0;
+    }
+
+    async function deleteSelectedRepos() {
+        if (!state.selectedRepos.length) return showToast('Select repositories to delete first', 'error');
+        const names = state.selectedRepos.join(', ');
+        if (!confirm(`Delete ${state.selectedRepos.length} repository(ies)?\n\n${names}\n\nThis will remove all index data (FAISS, BM25, graphs, metadata) and the cloned source code. This action cannot be undone.`)) return;
+        try {
+            const res = await fetch('/api/delete-repos', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ repo_names: state.selectedRepos, delete_source: true })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                showToast(data.message || 'Repositories deleted', 'success');
+                state.selectedRepos = [];
+                document.getElementById('selected-repos').innerHTML = '<span class="text-gray-400 italic">None selected</span>';
+                refreshStatus();
+            } else {
+                showToast(data.detail || 'Delete failed', 'error');
+            }
+        } catch(e) { showToast('Delete failed: ' + e.message, 'error'); }
+    }
+
+    async function deleteSession(sessionId) {
+        if (!confirm('Delete this conversation session? This action cannot be undone.')) return;
+        try {
+            const res = await fetch(`/api/session/${sessionId}`, { method: 'DELETE' });
+            const data = await res.json();
+            if (res.ok) {
+                showToast('Session deleted', 'success');
+                if (state.sessionId === sessionId) {
+                    newChat();
+                }
+                loadSessions();
+            } else {
+                showToast(data.detail || 'Delete failed', 'error');
+            }
+        } catch(e) { showToast('Delete failed: ' + e.message, 'error'); }
+    }
+</script>
+</body>
+</html>

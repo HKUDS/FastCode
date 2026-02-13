@@ -1,0 +1,60 @@
+# FastCode + Nanobot Docker Compose
+# 飞书 <-> Nanobot <-> FastCode 全链路通信
+#
+# Usage:
+#   docker compose up          # 前台启动
+#   docker compose up -d       # 后台启动
+#   docker compose logs -f     # 查看日志
+#   docker compose down        # 停止服务
+
+services:
+  fastcode:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastcode
+    ports:
+      - "8001:8001"
+    volumes:
+      # Configuration
+      - ./.env:/app/.env:ro
+      - ./config:/app/config:ro
+
+      # Persistent data (indexes, cache, repos, logs)
+      - ./data:/app/data
+      - ./repos:/app/repos
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TOKENIZERS_PARALLELISM=false
+    restart: unless-stopped
+
+  nanobot:
+    build:
+      context: ./nanobot
+      dockerfile: Dockerfile
+    container_name: fastcode-nanobot
+    command: ["gateway"]
+    ports:
+      - "18791:18790"
+    volumes:
+      # Nanobot configuration (飞书/Telegram token 等)
+      - ./nanobot_config.json:/root/.nanobot/config.json:ro
+
+      # Persistent workspace data
+      - nanobot-workspace:/root/.nanobot/workspace
+      - nanobot-sessions:/root/.nanobot/sessions
+
+      # Shared: nanobot can access FastCode repos
+      - ./repos:/app/repos:ro
+    environment:
+      - NANOBOT_ENV=docker
+      # Internal API URL for nanobot -> FastCode communication
+      - FASTCODE_API_URL=http://fastcode:8001
+    depends_on:
+      - fastcode
+    restart: unless-stopped
+
+volumes:
+  nanobot-workspace:
+  nanobot-sessions:

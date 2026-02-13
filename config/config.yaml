@@ -1,0 +1,206 @@
+# FastCode 2.0 Configuration
+
+# Repository Root Path (optional)
+# Set this if you want to pre-configure the repository path for agency mode
+# This will be overridden when loading a repository dynamically
+repo_root: ./repos  # Set to "/path/to/your/repo" or leave as null
+
+# Repository Settings
+repository:
+  clone_depth: 1  # Shallow clone for faster processing
+  max_file_size_mb: 5  # Skip files larger than this
+  ignore_patterns:
+    - "*.pyc"
+    - "__pycache__"
+    - "node_modules"
+    - ".git"
+    - "*.min.js"
+    - "*.bundle.js"
+    - "dist/*"
+    - "build/*"
+    - "*.lock"
+  supported_extensions:
+    - .py
+    - .js
+    - .ts
+    - .jsx
+    - .tsx
+    - .java
+    - .go
+    - .cpp
+    - .c
+    - .h
+    - .rs
+    - .rb
+    - .php
+    - .cs
+    - .swift
+    - .kt
+    - .pyx
+    - .toml
+    - .md
+    - .txt
+    - .yaml
+    - .rst
+    - .json
+    - .html
+    - .css
+    - .xml
+
+# Parser Settings
+parser:
+  extract_docstrings: true
+  extract_comments: true
+  extract_imports: true
+  compute_complexity: true
+  max_function_lines: 3000  # Skip extremely long functions
+
+# Embedding Settings
+embedding:
+  model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # Multilingual support (470MB)
+  # model: "sentence-transformers/all-MiniLM-L6-v2"  # Faster download but English only (90MB)
+  # Alternative: "BAAI/bge-large-en-v1.5" for better quality
+  device: "cuda"  # or "cpu"
+  batch_size: 32
+  max_seq_length: 512
+  normalize_embeddings: true
+
+# Indexing Settings
+indexing:
+  # Multi-level indexing
+  levels:
+    - file  # File-level metadata
+    - class  # Class definitions
+    - function  # Function definitions
+    - documentation  # Docs and comments
+
+  # Include context
+  include_imports: true
+  include_class_context: true
+  generate_repo_overview: true
+
+# Vector Store Settings
+vector_store:
+  type: "faiss"  # faiss, chromadb, or qdrant
+  distance_metric: "cosine"
+  index_type: "HNSW"  # HNSW for fast approximate search
+  ef_construction: 200
+  ef_search: 50
+  m: 16
+
+  # Persistence
+  persist_directory: "./data/vector_store"
+
+  # Performance optimization (for web interface)
+  index_scan_cache_ttl: 30  # Cache scan results for N seconds (0 to disable)
+  index_scan_sample_size: 100  # Sample size for file count estimation
+
+# Retrieval Settings
+retrieval:
+  # Hybrid search weights
+  semantic_weight: 0.5
+  keyword_weight: 0.5
+  graph_weight: 1
+
+  # Filters
+  min_similarity: 0.15
+  max_results: 5
+  diversity_penalty: 0.1  # Avoid returning too similar results
+
+  # multi-repository retrieval
+  enable_two_stage_retrieval: true
+  select_repos_by_overview: true  # Select relevant repos based on overview before retrieval (works in both agency and normal mode)
+  repo_selection_method: "llm"  # "llm" uses LLM to pick relevant repos from overviews; "embedding" uses semantic+BM25 scoring
+  top_repos_to_search: 5
+  min_repo_similarity: 0.1
+  max_files_to_search: 15
+
+  # Agency mode for accurate and comprehensive retrieval
+  enable_agency_mode: true  # Enable agent-based retrieval
+
+
+# Query Processing
+query:
+  # Basic processing
+  expand_query: true  # Add synonyms and related terms
+  decompose_complex: true  # Break down complex queries
+  max_subqueries: 3
+  extract_keywords: true
+  detect_intent: true  # Detect query type (how/what/where/debug/implement)
+
+  # LLM-Enhanced Processing
+  use_llm_enhancement: true  # Enable LLM-based query understanding
+  llm_enhancement_mode: "always"  # Options: "adaptive", "always", "off"
+  # - adaptive: Use LLM only for complex/implementation queries (recommended)
+  # - always: Use LLM for all queries (slower, more accurate)
+  # - off: Disable LLM enhancement (faster, rule-based only)
+
+  # Multi-turn dialogue settings
+  history_summary_rounds: 10  # Number of previous round summaries to use for query rewriting
+  max_summary_words: 500  # Maximum words for each round summary
+
+# Answer Generation
+# NOTE: model and base_url are read from environment variables (MODEL, BASE_URL)
+generation:
+  provider: "openai"  # openai, anthropic, or local
+  temperature: 0.4
+  max_tokens: 20000
+
+  # Context window management
+  max_context_tokens: 200000
+  reserve_tokens_for_response: 10000
+
+  # Prompt settings
+  include_file_paths: true
+  include_line_numbers: true
+  include_related_code: true
+
+  # Multi-turn dialogue settings
+  enable_multi_turn: true  # Enable multi-turn dialogue mode
+  context_rounds: 10  # Number of previous rounds to include in context for answer generation
+
+# Graph Building
+graph:
+  build_call_graph: true
+  build_dependency_graph: true
+  build_inheritance_graph: true
+  max_depth: 5
+
+# Agent Settings
+agent:
+  # Iterative Agent - Multi-round retrieval with confidence control
+  iterative:
+    max_iterations: 4  # Maximum number of retrieval rounds
+    confidence_threshold: 95  # Stop iteration if confidence >= this value (0-100)
+    min_confidence_gain: 5  # Minimum confidence gain required to continue (0-100)
+    max_total_lines: 12000  # Maximum total lines of code to retrieve
+    temperature_agent: 0.2  # Temperature for agent reasoning
+    max_tokens_agent: 8000  # Max tokens for agent responses
+    max_elements: 100  # Maximum elements to keep after relevance filtering
+    max_candidates_display: 200  # Maximum candidates to display in formatting
+
+# Caching
+cache:
+  enabled: true
+  backend: "disk"  # disk or redis
+  ttl: 3600  # seconds (1 hour) - for embeddings and general cache
+  dialogue_ttl: 2592000  # seconds (30 days) - for dialogue history persistence
+  max_size_mb: 1000
+  cache_embeddings: true
+  cache_queries: false
+  cache_directory: "./data/cache"
+
+# Evaluation Mode Settings
+evaluation:
+  enabled: false           # default off; enabled for benchmarks
+  in_memory_index: false   # keep index purely in RAM
+  disable_cache: false     # skip query/embedding cache
+  disable_persistence: false  # skip writing FAISS/BM25/graph files
+  force_reindex: false     # always rebuild instead of loading cached artifacts
+
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "./logs/fastcode.log"
+  console: true

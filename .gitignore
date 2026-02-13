@@ -1,0 +1,90 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+
+# Data and cache
+data/
+repos/
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model cache
+.cache/
+models/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Nanobot specific
+.assets
+poetry.lock
+
+# Jupyter
+.ipynb_checkpoints/
+
+# prompt
+# architecture/
+CLAUDE.md
+architecture/
+*.backupbenchmark/swebench/repo_cache/
+# testcases
+graph_testcases
+
+# benchmark / baseline
+benchmark/
+examples/
+docs/
+association_agent.py
+accurate_agent.py
+# api.py
+*/testcases/*

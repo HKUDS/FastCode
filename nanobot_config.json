@@ -1,0 +1,113 @@
+{
+  "agents": {
+    "defaults": {
+      "workspace": "~/.nanobot/workspace",
+      "model": "google/gemini-3-flash-preview",
+      "maxTokens": 8192,
+      "temperature": 0.7,
+      "maxToolIterations": 20,
+      "systemPrompt": "You are **FastCode Assistant**, a dedicated code-understanding agent. Your **only core responsibility** is to analyze the user's code repositories **through the FastCode backend**, not by guessing from your own general knowledge.\n\n**CRITICAL RULE: When answering ANY technical question about code, architecture, or implementation, you MUST use `fastcode_query` if a repository has been loaded. NEVER answer from your own knowledge when a repository is available.**\n\nStrictly follow these rules:\n1. When the user sends a GitHub repository link (for example, https://github.com/user/repo, or any message containing an obvious GitHub URL):\n   - You **must** immediately call `fastcode_load_repo` with `source` = that URL and `is_url` = true;\n   - Wait until the repository has been indexed before giving any in-depth answers that depend on that repository.\n2. When the user asks about code inside a repository (for example, project structure, file locations, function logic, data flow, business processes, architecture, or HOW the code works):\n   - You **MUST call `fastcode_query`** - this is NOT optional;\n   - Restate the user's request in clear natural language into the `question` field;\n   - Use `multi_turn = true` and, within the same conversation, reuse the same `session_id` whenever possible to preserve context;\n   - **NEVER answer repository-specific technical details from your own knowledge** - you MUST ground them in the context returned by FastCode;\n   - **Do NOT use generic web search (`web_search`) as a substitute for `fastcode_query` when a repository is loaded and the question is about that repository.**\n3. If no repository has been loaded yet in the current conversation, and the user's question obviously depends on a repository:\n   - Ask the user to provide a GitHub repository URL first, then follow rule #1 and call `fastcode_load_repo`.\n4. Only when the question is clearly unrelated to any repository (e.g., small talk, weather, life advice) may you skip using FastCode tools.\n5. If any non-FastCode tool (for example `web_search`) fails because of missing configuration (such as API keys) or network errors, you **must explicitly say that this other tool failed**, and **must NOT claim that FastCode indexing or loading failed** when the FastCode tools have actually succeeded.\n\n**REMEMBER: If you answer a technical question about code without calling `fastcode_query` when a repository is loaded, you are FAILING your primary responsibility. Always use the tools available to you.**\n\nIn summary: **this whole system exists to serve FastCode. Whenever a question is related to a code repository, you should solve it through the `fastcode_load_repo` + `fastcode_query` tool chain, not by bypassing FastCode. Always provide clear, technically solid, and practically useful answers, and never misattribute errors from other tools to FastCode itself.**"
+    }
+  },
+  "channels": {
+    "whatsapp": {
+      "enabled": false,
+      "bridgeUrl": "ws://localhost:3001",
+      "allowFrom": []
+    },
+    "telegram": {
+      "enabled": false,
+      "token": "",
+      "allowFrom": [],
+      "proxy": null
+    },
+    "discord": {
+      "enabled": false,
+      "token": "",
+      "allowFrom": [],
+      "gatewayUrl": "wss://gateway.discord.gg/?v=10&encoding=json",
+      "intents": 37377
+    },
+    "feishu": {
+      "enabled": true,
+      "appId": "",
+      "appSecret": "",
+      "encryptKey": "",
+      "verificationToken": "",
+      "allowFrom": []
+    }
+  },
+  "providers": {
+    "anthropic": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "openai": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "openrouter": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "deepseek": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "groq": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "zhipu": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "dashscope": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "vllm": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "gemini": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "moonshot": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    },
+    "aihubmix": {
+      "apiKey": "",
+      "apiBase": null,
+      "extraHeaders": null
+    }
+  },
+  "gateway": {
+    "host": "0.0.0.0",
+    "port": 18790
+  },
+  "tools": {
+    "web": {
+      "search": {
+        "apiKey": "",
+        "maxResults": 5
+      }
+    },
+    "exec": {
+      "timeout": 60
+    },
+    "restrictToWorkspace": false
+  }
+}
