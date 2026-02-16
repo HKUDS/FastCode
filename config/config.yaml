@@ -60,7 +60,7 @@ embedding:
   model: "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"  # Multilingual support (470MB)
   # model: "sentence-transformers/all-MiniLM-L6-v2"  # Faster download but English only (90MB)
   # Alternative: "BAAI/bge-large-en-v1.5" for better quality
-  device: "cuda"  # or "cpu"
+  device: "auto"  # "auto" (recommended), "cuda", "mps", or "cpu"
   batch_size: 32
   max_seq_length: 512
   normalize_embeddings: true
