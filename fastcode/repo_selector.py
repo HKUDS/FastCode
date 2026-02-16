@@ -10,6 +10,8 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 import re
 
+from .llm_utils import openai_chat_completion
+
 
 class RepositorySelector:
     """Use LLM to select relevant repositories and files based on user query"""
@@ -186,7 +188,8 @@ class RepositorySelector:
     
     def _call_openai(self, prompt: str) -> str:
         """Call OpenAI API"""
-        response = self.llm_client.chat.completions.create(
+        response = openai_chat_completion(
+            self.llm_client,
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=self.temperature,

@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 import numpy as np
 
 from .agent_tools import AgentTools
+from .llm_utils import openai_chat_completion
 from .path_utils import PathUtils
 
 
@@ -2473,7 +2474,8 @@ If continuing (confidence < {self.confidence_threshold} and budget available):
         self.logger.info(f"Calling LLM: prompt_len={len(prompt)}, max_tokens={self.max_tokens}")
 
         if self.provider == "openai":
-            response = self.client.chat.completions.create(
+            response = openai_chat_completion(
+                self.client,
                 model=self.model,
                 messages=[
                     {"role": "system", "content": "You are a precise code analysis agent. Respond in specified format only."},

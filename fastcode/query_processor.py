@@ -11,6 +11,8 @@ from openai import OpenAI
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
+from .llm_utils import openai_chat_completion
+
 
 @dataclass
 class ProcessedQuery:
@@ -589,7 +591,8 @@ Be concise and focus on improving code retrieval accuracy."""
     
     def _call_openai(self, prompt: str) -> str:
         """Call OpenAI API for query enhancement"""
-        response = self.llm_client.chat.completions.create(
+        response = openai_chat_completion(
+            self.llm_client,
             model=self.model,
             messages=[{"role": "user", "content": prompt}],
             temperature=self.temperature,
