@@ -11,6 +11,7 @@ from openai import OpenAI
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
+from .llm_utils import openai_chat_completion
 from .utils import count_tokens, truncate_to_tokens
 
 
@@ -637,7 +638,8 @@ Symbol Mappings:
             return "Error: OpenAI client not initialized"
 
         try:
-            response = self.client.chat.completions.create(
+            response = openai_chat_completion(
+                self.client,
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=self.temperature,
@@ -667,7 +669,8 @@ Symbol Mappings:
             return
 
         try:
-            response = self.client.chat.completions.create(
+            response = openai_chat_completion(
+                self.client,
                 model=self.model,
                 messages=[{"role": "user", "content": prompt}],
                 temperature=self.temperature,

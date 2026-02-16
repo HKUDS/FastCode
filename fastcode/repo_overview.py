@@ -10,6 +10,8 @@ from openai import OpenAI
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
+from .llm_utils import openai_chat_completion
+
 
 class RepositoryOverviewGenerator:
     """Generate repository overviews from README files and file structure"""
@@ -254,7 +256,8 @@ Summary:"""
         
         try:
             if self.provider == "openai":
-                response = self.llm_client.chat.completions.create(
+                response = openai_chat_completion(
+                    self.llm_client,
                     model=self.model,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=self.temperature,
