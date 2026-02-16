@@ -19,15 +19,14 @@ class CodeEmbedder:
         self.logger = logging.getLogger(__name__)
         
         self.model_name = self.embedding_config.get("model", "sentence-transformers/all-MiniLM-L6-v2")
-        self.device = self.embedding_config.get("device", "cpu")
+        self.device = self.embedding_config.get("device", "auto")
         self.batch_size = self.embedding_config.get("batch_size", 32)
         self.max_seq_length = self.embedding_config.get("max_seq_length", 512)
         self.normalize = self.embedding_config.get("normalize_embeddings", True)
         
-        # Check for CUDA availability
-        if self.device == "cuda" and not torch.cuda.is_available():
-            self.logger.warning("CUDA not available, falling back to CPU")
-            self.device = "cpu"
+        # Auto-detect best available device: CUDA > MPS > CPU
+        if self.device != "cpu":
+            self.device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
         
         self.logger.info(f"Loading embedding model: {self.model_name}")
         self.model = self._load_model()
