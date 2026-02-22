@@ -380,11 +380,6 @@
                         <button onclick="sendMessage()" id="send-btn" class="bg-teal-600 text-white p-2 rounded-lg hover:bg-teal-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-sm" disabled>
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
                         </button>
-                        <button onclick="stopGeneration()" id="stop-btn" class="bg-red-500 text-white p-2 rounded-lg hover:bg-red-600 transition shadow-sm hidden">
-                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                                <rect x="6" y="6" width="12" height="12" rx="2"/>
-                            </svg>
-                        </button>
                     </div>
                 </div>
             </div>
@@ -418,8 +413,6 @@
         chatMode: false, // false = single, true = multi
         messages: []
     };
-
-    let currentAbortController = null;
 
     // --- MARKDOWN SETUP ---
     const mdRenderer = new marked.Renderer();
@@ -466,11 +459,7 @@
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                if (state.isSending) {
-                    stopGeneration();
-                } else {
-                    sendMessage();
-                }
+                sendMessage();
             }
         });
 
@@ -510,16 +499,6 @@
         const canSend = state.ready && state.selectedRepos.length > 0 && !state.isSending;
         document.getElementById('message-input').disabled = !canSend;
         document.getElementById('send-btn').disabled = !canSend;
-
-        const sendBtn = document.getElementById('send-btn');
-        const stopBtn = document.getElementById('stop-btn');
-        if (state.isSending) {
-            sendBtn.classList.add('hidden');
-            stopBtn.classList.remove('hidden');
-        } else {
-            sendBtn.classList.remove('hidden');
-            stopBtn.classList.add('hidden');
-        }
     }
 
     function renderRepoList(filter = '') {
@@ -592,7 +571,7 @@
     async function sendMessage() {
         const input = document.getElementById('message-input');
         const question = input.value.trim();
-        if (!question || !state.ready || state.isSending) return;
+        if (!question || !state.ready) return;
 
         if (!state.sessionId) await startNewSession();
 
@@ -666,7 +645,6 @@
         }
 
         try {
-            currentAbortController = new AbortController();
             const response = await fetch('/api/query-stream', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -675,8 +653,7 @@
                     repo_filter: state.selectedRepos,
                     multi_turn: state.chatMode,
                     session_id: state.sessionId
-                }),
-                signal: currentAbortController.signal
+                })
             });
 
             if (!response.ok) {
@@ -773,19 +750,7 @@
         } catch (e) {
             const contentEl = document.getElementById(`${streamId}-content`);
             if (contentEl) {
-                if (e.name === 'AbortError') {
-                    if (renderTimeout) {
-                        clearTimeout(renderTimeout);
-                        renderTimeout = null;
-                    }
-                    if (fullContent) {
-                        contentEl.innerHTML = marked.parse(fullContent);
-                    } else {
-                        contentEl.textContent = 'Response stopped.';
-                    }
-                } else {
-                    contentEl.innerHTML = `<span class="text-red-500">Error: ${escapeHtml(e.message)}</span>`;
-                }
+                contentEl.innerHTML = `<span class="text-red-500">Error: ${escapeHtml(e.message)}</span>`;
             }
         } finally {
             // Clean up scroll listener
@@ -793,16 +758,8 @@
             if (renderTimeout) {
                 clearTimeout(renderTimeout);
             }
-            currentAbortController = null;
             state.isSending = false;
             updateUIStatus();
-        }
-    }
-
-    function stopGeneration() {
-        if (currentAbortController) {
-            currentAbortController.abort();
-            currentAbortController = null;
         }
     }
 
