@@ -592,7 +592,7 @@
     async function sendMessage() {
         const input = document.getElementById('message-input');
         const question = input.value.trim();
-        if (!question || !state.ready) return;
+        if (!question || !state.ready || state.isSending) return;
 
         if (!state.sessionId) await startNewSession();
 
