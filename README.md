@@ -886,6 +886,16 @@ If FastCode saves you tokens and time, consider giving us a star! ⭐
 
 </div>
 
+<div align="center">
+  <a href="https://star-history.com/#HKUDS/FastCode&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=HKUDS/FastCode&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=HKUDS/FastCode&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=HKUDS/FastCode&type=Date" style="border-radius: 15px; box-shadow: 0 0 30px rgba(0, 217, 255, 0.3);" />
+    </picture>
+  </a>
+</div>
+
 <p align="center">
   <em> Thanks for visiting ✨ FastCode!</em><br><br>
   <img src="https://visitor-badge.laobi.icu/badge?page_id=HKUDS.FastCode&style=for-the-badge&color=00d4ff" alt="Views">
