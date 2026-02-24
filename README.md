@@ -878,9 +878,9 @@ FastCode is released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## 🌟 Star History
 
-If FastCode saves you tokens and time, consider giving us a star! ⭐
-
 <div align="center">
+
+If FastCode saves you tokens and time, consider giving us a star! ⭐
 
 **Built with ❤️ for developers who value efficiency**
 
