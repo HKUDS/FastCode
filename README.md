@@ -16,7 +16,7 @@
   <a href="https://github.com/HKUDS/FastCode/issues/2"><img src="https://img.shields.io/badge/💬Feishu-Group-3370ff?style=for-the-badge&logo=bytedance&logoColor=white&labelColor=1a1a2e"></a>
 </p>
 
-[Features](#-why-fastcode) • [Quick Start](#-quick-start) • [Installation](#-installation) • [Documentation](#-how-it-works)
+[Features](#-why-fastcode) • [Quick Start](#-quick-start) • [Installation](#-installation) • [MCP Server](#mcp-server-use-in-cursor--claude-code--windsurf) • [Documentation](#-how-it-works)
 
 </div>
 
@@ -41,7 +41,7 @@ FastCode is a token-efficient framework for comprehensive code understanding and
 ## Key Features of FastCode
 
 ### 🎯 Core Performance Advantages
-- 3-4x Faster than competitors (Cursor/Claude Code)
+- 2-4x Faster than competitors (Cursor/Claude Code)
 - 44-55% Cost Reduction compared to alternatives
 - Highest Accuracy Score across benchmarks
 - Up to 10x Token Savings through smart navigation
@@ -53,6 +53,7 @@ FastCode is a token-efficient framework for comprehensive code understanding and
 - Small Model Support - Local model compatibility (qwen3-coder-30b)
 
 ### 💻 User Experience
+- **MCP Server** - Use FastCode directly through MCP integration (e.g., Cursor, Claude Code)
 - Beautiful Web UI - Intuitive codebase exploration
 - Flexible API - Easy workflow integration
 - Smart Structural Navigation - Load only what you need
@@ -540,6 +541,117 @@ response = requests.post("http://localhost:8000/query", json={
 result = response.json()
 print(result["answer"])
 print(f"Tokens used: {result['total_tokens']}")
+```
+
+</details>
+
+<details>
+<summary><b>MCP Server (Use in Cursor / Claude Code / Windsurf)</b></summary>
+
+FastCode can run as an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server, allowing AI coding assistants like **Cursor**, **Claude Code**, and **Windsurf** to use FastCode's repo-level code understanding capabilities directly.
+
+#### Setup
+
+Add the following to your MCP configuration:
+
+Before configuring MCP, make sure FastCode dependencies are installed in the local uv virtual environment:
+
+```bash
+git clone https://github.com/HKUDS/FastCode.git
+cd FastCode
+uv venv --python=3.12
+source .venv/bin/activate
+uv pip install -r requirements.txt
+```
+
+The MCP server should be launched with `.venv/bin/python`, and it needs `OPENAI_API_KEY`, `MODEL`, and `BASE_URL`.
+
+**Cursor** (`~/.cursor/mcp.json`):
+```json
+{
+  "mcpServers": {
+    "fastcode": {
+      "command": "/path/to/FastCode/.venv/bin/python",
+      "args": ["/path/to/FastCode/mcp_server.py"],
+      "env": {
+        "MODEL": "gpt-5.2",
+        "BASE_URL": "https://api.openai.com/v1",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
+
+**Claude Code** (`claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "fastcode": {
+      "command": "/path/to/FastCode/.venv/bin/python",
+      "args": ["/path/to/FastCode/mcp_server.py"],
+      "env": {
+        "MODEL": "gpt-5.2",
+        "BASE_URL": "https://api.openai.com/v1",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
+
+Or via `claude mcp add` (ensure the same env vars are available in your shell):
+```bash
+claude mcp add fastcode -- /path/to/FastCode/.venv/bin/python /path/to/FastCode/mcp_server.py
+```
+
+**SSE transport** (for remote / shared deployments):
+```bash
+OPENAI_API_KEY=sk-... MODEL=gpt-5.2 BASE_URL=https://api.openai.com/v1 \
+/path/to/FastCode/.venv/bin/python /path/to/FastCode/mcp_server.py --transport sse --port 8080
+```
+
+#### Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `code_qa` | Core tool — ask questions about one or more code repositories. Automatically clones (if URL) and indexes repos that haven't been indexed yet. Supports multi-turn conversations. |
+| `list_indexed_repos` | List all repositories that have been indexed and are available for querying. |
+| `list_sessions` | List all existing conversation sessions with titles and turn counts. |
+| `get_session_history` | Retrieve the full Q&A history of a specific session. |
+| `delete_session` | Delete a conversation session and all its history. |
+| `delete_repo_metadata` | Delete indexed metadata for a repository (`.faiss`, `_metadata.pkl`, `_bm25.pkl`, `_graphs.pkl`) and remove its entry from `repo_overviews.pkl`, while keeping the repository source code. |
+
+#### `code_qa` Parameters
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `question` | Yes | — | The question to ask about the code |
+| `repos` | Yes | — | List of repo sources (GitHub URLs or local paths). Multiple repos supported. |
+| `multi_turn` | No | `true` | Enable multi-turn conversation mode |
+| `session_id` | No | auto-generated | Session ID for continuing a conversation. Returned in the response of each call. |
+
+#### How It Works
+
+1. **Auto-detection**: For each repo in `repos`, FastCode checks if it's already indexed. If yes, it skips indexing entirely.
+2. **Auto-clone**: If a repo is a URL and not yet on disk, FastCode clones it to `./repos/` and indexes it.
+3. **Multi-turn**: When `multi_turn` is enabled (default), previous Q&A context from the same `session_id` is used for query rewriting and answer generation. The `session_id` is returned in each response — pass it back in subsequent calls to continue the conversation.
+4. **Multi-repo**: Pass multiple repos to `repos` and FastCode will search across all of them, using LLM-based repository selection to find the most relevant code.
+
+#### Usage Example
+
+In Cursor or Claude Code, simply ask:
+
+```
+Analyze the authentication flow in https://github.com/user/my-project
+```
+
+The AI assistant will call `code_qa` with the URL, FastCode will clone and index the repo (if needed), and return a detailed answer with source references.
+
+For follow-up questions, the assistant reuses the same `session_id` automatically:
+
+```
+Which files would be affected if I change the User model?
 ```
 
 </details>

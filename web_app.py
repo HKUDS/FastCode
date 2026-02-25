@@ -717,6 +717,7 @@ async def list_sessions():
                 "total_turns": session.get("total_turns", 0),
                 "created": session.get("created", 0),
                 "last_updated": session.get("last_updated", 0),
+                "multi_turn": session.get("multi_turn", False),
             }
             formatted_sessions.append(formatted_session)
 
@@ -737,7 +738,11 @@ async def get_session(session_id: str):
         # Ensure JSON-serializable history
         safe_history = [_safe_jsonable(turn) for turn in history]
 
-        return {"status": "success", "session_id": session_id, "history": safe_history}
+        # Determine if this session was multi-turn from session index
+        session_index = fastcode_instance.cache_manager._get_session_index(session_id)
+        multi_turn = session_index.get("multi_turn", False) if session_index else False
+
+        return {"status": "success", "session_id": session_id, "history": safe_history, "multi_turn": multi_turn}
     except Exception as e:
         logger.error(f"Failed to load session {session_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

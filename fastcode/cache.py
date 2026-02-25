@@ -206,13 +206,13 @@ class CacheManager:
     
     # ===== Multi-turn Dialogue Session Cache Methods =====
     
-    def save_dialogue_turn(self, session_id: str, turn_number: int, 
+    def save_dialogue_turn(self, session_id: str, turn_number: int,
                            query: str, answer: str, summary: str,
                            retrieved_elements: Optional[List[Dict[str, Any]]] = None,
                            metadata: Optional[Dict[str, Any]] = None) -> bool:
         """
         Save a single dialogue turn to cache
-        
+
         Args:
             session_id: Unique session identifier
             turn_number: Turn number (1-indexed)
@@ -221,13 +221,13 @@ class CacheManager:
             summary: Brief summary of the dialogue turn
             retrieved_elements: Retrieved code elements (optional)
             metadata: Additional metadata (optional)
-        
+
         Returns:
             True if successful, False otherwise
         """
         if not self.enabled:
             return False
-        
+
         try:
             # Create turn data
             turn_data = {
@@ -240,7 +240,7 @@ class CacheManager:
                 "retrieved_elements": retrieved_elements or [],
                 "metadata": metadata or {}
             }
-            
+
             # Generate key
             key = f"dialogue_{session_id}_turn_{turn_number}"
 
@@ -248,12 +248,13 @@ class CacheManager:
             # Use configurable dialogue_ttl instead of hardcoded value
             self.set(key, turn_data, ttl=self.dialogue_ttl)
 
-            # Update session index
-            self._update_session_index(session_id, turn_number)
-            
+            # Update session index (propagate multi_turn flag from metadata)
+            multi_turn = (metadata or {}).get("multi_turn")
+            self._update_session_index(session_id, turn_number, multi_turn=multi_turn)
+
             self.logger.debug(f"Saved dialogue turn: {session_id} turn {turn_number}")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Failed to save dialogue turn: {e}")
             return False
@@ -349,7 +350,8 @@ class CacheManager:
             self.logger.error(f"Failed to get recent summaries: {e}")
             return []
     
-    def _update_session_index(self, session_id: str, turn_number: int) -> bool:
+    def _update_session_index(self, session_id: str, turn_number: int,
+                              multi_turn: Optional[bool] = None) -> bool:
         """Update session index with new turn"""
         try:
             key = f"dialogue_session_{session_id}_index"
@@ -357,16 +359,21 @@ class CacheManager:
                 "session_id": session_id,
                 "created_at": time.time(),
                 "total_turns": 0,
-                "last_updated": time.time()
+                "last_updated": time.time(),
+                "multi_turn": False
             }
-            
+
             session_index["total_turns"] = max(session_index["total_turns"], turn_number)
             session_index["last_updated"] = time.time()
+
+            # Once a session is marked as multi_turn, keep it that way
+            if multi_turn is True:
+                session_index["multi_turn"] = True
 
             # Use configurable dialogue_ttl instead of hardcoded value
             self.set(key, session_index, ttl=self.dialogue_ttl)
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Failed to update session index: {e}")
             return False

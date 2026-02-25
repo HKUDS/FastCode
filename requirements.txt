@@ -51,6 +51,9 @@ pathspec
 diskcache
 redis
 
+# MCP Server
+mcp[cli]
+
 # Testing
 pytest
 pytest-asyncio

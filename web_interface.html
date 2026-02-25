@@ -820,18 +820,24 @@
 
     // --- UTILS ---
     function toggleChatMode() {
-        state.chatMode = !state.chatMode;
+        setChatMode(!state.chatMode);
+    }
+
+    function setChatMode(enabled) {
+        state.chatMode = enabled;
         const knob = document.getElementById('chat-mode-knob');
         const track = document.getElementById('chat-mode-track');
         const label = document.getElementById('chat-mode-label');
 
         if (state.chatMode) {
             knob.classList.add('translate-x-full');
-            track.classList.replace('bg-gray-200', 'bg-teal-600');
+            track.classList.remove('bg-gray-200');
+            track.classList.add('bg-teal-600');
             label.textContent = 'Multi-turn';
         } else {
             knob.classList.remove('translate-x-full');
-            track.classList.replace('bg-teal-600', 'bg-gray-200');
+            track.classList.remove('bg-teal-600');
+            track.classList.add('bg-gray-200');
             label.textContent = 'Single-turn';
         }
     }
@@ -934,6 +940,7 @@
                         <div class="text-xs text-gray-400">${new Date((s.last_updated || s.created)*1000).toLocaleString()}</div>
                     </div>
                     <div class="flex items-center gap-2 flex-shrink-0">
+                        ${s.multi_turn ? '<span class="text-xs bg-teal-100 text-teal-600 px-2 py-1 rounded-full">multi</span>' : ''}
                         <span class="text-xs bg-gray-100 text-gray-500 px-2 py-1 rounded-full">${s.total_turns} turns</span>
                         <button onclick="event.stopPropagation(); deleteSession('${s.session_id}')" class="p-1 rounded hover:bg-red-100 text-gray-400 hover:text-red-500 transition opacity-0 group-hover:opacity-100" title="Delete session">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -951,14 +958,19 @@
             const data = await res.json();
             state.sessionId = id;
             updateSessionDisplay();
-            
+
+            // Restore multi-turn mode if the session was multi-turn
+            if (data.multi_turn) {
+                setChatMode(true);
+            }
+
             // Clear current messages
             document.getElementById('messages').innerHTML = '';
-            
+
             // Rehydrate
             const history = data.history || [];
             history.sort((a,b) => (a.turn_number||0) - (b.turn_number||0));
-            
+
             history.forEach(turn => {
                 if(turn.query) addMessage({ role: 'user', content: turn.query });
                 if(turn.answer) addMessage({ role: 'assistant', content: turn.answer, sources: turn.retrieved_elements });
@@ -970,6 +982,7 @@
     function newChat() {
         state.sessionId = null;
         state.messages = [];
+        setChatMode(false);
         document.getElementById('messages').innerHTML = `
             <div class="text-center py-10">
                 <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-teal-50 text-teal-600 mb-4">

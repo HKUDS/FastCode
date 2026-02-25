@@ -178,18 +178,53 @@ class RepositoryLoader:
             self.logger.error(f"Failed to extract ZIP file: {e}")
             raise RuntimeError(f"Failed to extract ZIP file: {e}")
     
+    def _load_gitignore_patterns(self) -> List[str]:
+        """
+        Load .gitignore patterns from the repository root.
+
+        Returns:
+            List of gitignore patterns, empty if no .gitignore found
+        """
+        if not self.repo_path:
+            return []
+
+        gitignore_path = os.path.join(self.repo_path, ".gitignore")
+        if not os.path.isfile(gitignore_path):
+            return []
+
+        patterns = []
+        try:
+            with open(gitignore_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    # Skip empty lines and comments
+                    if line and not line.startswith("#"):
+                        patterns.append(line)
+            self.logger.info(f"Loaded {len(patterns)} patterns from .gitignore")
+        except Exception as e:
+            self.logger.warning(f"Failed to read .gitignore: {e}")
+
+        return patterns
+
     def scan_files(self) -> List[Dict[str, Any]]:
         """
         Scan repository and collect file metadata
-        
+
         Returns:
             List of file metadata dictionaries
         """
         if not self.repo_path:
             raise RuntimeError("No repository loaded")
-        
+
         self.logger.info(f"Scanning files in {self.repo_path}")
-        
+
+        # Merge .gitignore patterns into ignore_patterns
+        gitignore_patterns = self._load_gitignore_patterns()
+        if gitignore_patterns:
+            effective_ignore = list(self.ignore_patterns) + gitignore_patterns
+        else:
+            effective_ignore = self.ignore_patterns
+
         files = []
         total_size = 0
         max_file_size_bytes = self.max_file_size_mb * 1024 * 1024
@@ -197,15 +232,15 @@ class RepositoryLoader:
         for root, dirs, filenames in os.walk(self.repo_path):
             # Filter out ignored directories
             dirs[:] = [d for d in dirs if not should_ignore_path(
-                os.path.join(root, d), self.ignore_patterns
+                os.path.join(root, d), effective_ignore
             )]
-            
+
             for filename in filenames:
                 file_path = os.path.join(root, filename)
                 relative_path = os.path.relpath(file_path, self.repo_path)
-                
+
                 # Check if should ignore
-                if should_ignore_path(relative_path, self.ignore_patterns):
+                if should_ignore_path(relative_path, effective_ignore):
                     continue
                 
                 # Check if supported extension
