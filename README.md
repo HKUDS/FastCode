@@ -14,6 +14,8 @@
 <p>
   <a href="https://github.com/HKUDS/FastCode/issues/1"><img src="https://img.shields.io/badge/💬WeChat-Group-07c160?style=for-the-badge&logo=wechat&logoColor=white&labelColor=1a1a2e"></a>
   <a href="https://github.com/HKUDS/FastCode/issues/2"><img src="https://img.shields.io/badge/💬Feishu-Group-3370ff?style=for-the-badge&logo=bytedance&logoColor=white&labelColor=1a1a2e"></a>
+  <a href="https://github.com/HKUDS/.github/blob/main/profile/README.md"><img src="https://img.shields.io/badge/Feishu-Group-E9DBFC?style=flat&logo=feishu&logoColor=white" alt="Feishu"></a>
+  <a href="https://github.com/HKUDS/.github/blob/main/profile/README.md"><img src="https://img.shields.io/badge/WeChat-Group-C5EAB4?style=flat&logo=wechat&logoColor=white" alt="WeChat"></a>
 </p>
 
 [Features](#-why-fastcode) • [Quick Start](#-quick-start) • [Installation](#-installation) • [MCP Server](#mcp-server-use-in-cursor--claude-code--windsurf) • [Documentation](#-how-it-works)
@@ -990,12 +992,22 @@ FastCode is released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## 🌟 Star History
 
-If FastCode saves you tokens and time, consider giving us a star! ⭐
-
 <div align="center">
+
+If FastCode saves you tokens and time, consider giving us a star! ⭐
 
 **Built with ❤️ for developers who value efficiency**
 
+</div>
+
+<div align="center">
+  <a href="https://star-history.com/#HKUDS/FastCode&Date">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=HKUDS/FastCode&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=HKUDS/FastCode&type=Date" />
+      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=HKUDS/FastCode&type=Date" style="border-radius: 15px; box-shadow: 0 0 30px rgba(0, 217, 255, 0.3);" />
+    </picture>
+  </a>
 </div>
 
 <p align="center">
