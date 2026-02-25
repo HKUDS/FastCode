@@ -646,7 +646,13 @@ OPENAI_API_KEY=sk-... MODEL=gpt-5.2 BASE_URL=https://api.openai.com/v1 \
 In Cursor or Claude Code, simply ask:
 
 ```
-Analyze the authentication flow in https://github.com/user/my-project
+Use FastCode to analyze what this repository at /path/to/repo_name is for.
+```
+
+or
+
+```
+Use FastCode to analyze the authentication flow in https://github.com/user/my-project
 ```
 
 The AI assistant will call `code_qa` with the URL, FastCode will clone and index the repo (if needed), and return a detailed answer with source references.
