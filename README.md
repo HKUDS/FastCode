@@ -547,6 +547,7 @@ print(f"Tokens used: {result['total_tokens']}")
 
 </details>
 
+<a id="mcp-server-use-in-cursor--claude-code--windsurf"></a>
 <details>
 <summary><b>MCP Server (Use in Cursor / Claude Code / Windsurf)</b></summary>
 
