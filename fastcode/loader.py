@@ -230,14 +230,27 @@ class RepositoryLoader:
         max_file_size_bytes = self.max_file_size_mb * 1024 * 1024
         
         for root, dirs, filenames in os.walk(self.repo_path):
-            # Filter out ignored directories
-            dirs[:] = [d for d in dirs if not should_ignore_path(
-                os.path.join(root, d), effective_ignore
-            )]
+            # Filter ignored directories using repo-relative paths so gitwildmatch
+            # patterns like "output/" or ".venv/" match consistently.
+            filtered_dirs = []
+            for d in dirs:
+                abs_dir_path = os.path.join(root, d)
+                rel_dir_path = normalize_path(
+                    os.path.relpath(abs_dir_path, self.repo_path)
+                )
+                rel_dir_with_trailing = f"{rel_dir_path}/"
+                if should_ignore_path(
+                    rel_dir_path, effective_ignore
+                ) or should_ignore_path(rel_dir_with_trailing, effective_ignore):
+                    continue
+                filtered_dirs.append(d)
+            dirs[:] = filtered_dirs
 
             for filename in filenames:
                 file_path = os.path.join(root, filename)
-                relative_path = os.path.relpath(file_path, self.repo_path)
+                relative_path = normalize_path(
+                    os.path.relpath(file_path, self.repo_path)
+                )
 
                 # Check if should ignore
                 if should_ignore_path(relative_path, effective_ignore):
@@ -347,4 +360,3 @@ class RepositoryLoader:
     def __del__(self):
         """Cleanup on deletion"""
         self.cleanup()
-
