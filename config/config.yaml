@@ -14,11 +14,54 @@ repository:
     - "__pycache__"
     - "node_modules"
     - ".git"
+    - ".git/*"
     - "*.min.js"
     - "*.bundle.js"
     - "dist/*"
     - "build/*"
     - "*.lock"
+    # OmniLore workspace size control (avoid indexing generated/runtime trees)
+    - ".backup-*"
+    - ".backup-*/*"
+    - ".omnilore"
+    - ".omnilore/*"
+    - ".omnilore_persist"
+    - ".omnilore_persist/*"
+    - ".venv"
+    - ".venv/*"
+    - ".venv-*"
+    - ".venv-*/*"
+    - "venv*"
+    - "venv*/*"
+    - "output"
+    - "output/*"
+    - "out"
+    - "out/*"
+    - "reports"
+    - "reports/*"
+    - "docs"
+    - "docs/*"
+    - "external"
+    - "external/*"
+    - "node_modules/*"
+    - ".mypy_cache"
+    - ".mypy_cache/*"
+    - ".pytest_cache"
+    - ".pytest_cache/*"
+    - ".hypothesis"
+    - ".hypothesis/*"
+    - "htmlcov"
+    - "htmlcov/*"
+    - "logs"
+    - "logs/*"
+    - "artifacts"
+    - "artifacts/*"
+    - "archives"
+    - "archives/*"
+    - "data"
+    - "data/*"
+    - "chroma"
+    - "chroma/*"
   supported_extensions:
     - .py
     - .js
@@ -38,14 +81,7 @@ repository:
     - .kt
     - .pyx
     - .toml
-    - .md
-    - .txt
     - .yaml
-    - .rst
-    - .json
-    - .html
-    - .css
-    - .xml
 
 # Parser Settings
 parser:
@@ -116,7 +152,7 @@ retrieval:
   max_files_to_search: 15
 
   # Agency mode for accurate and comprehensive retrieval
-  enable_agency_mode: true  # Enable agent-based retrieval
+  enable_agency_mode: false  # Prefer deterministic retrieval for local stability
 
 
 # Query Processing
@@ -129,8 +165,8 @@ query:
   detect_intent: true  # Detect query type (how/what/where/debug/implement)
 
   # LLM-Enhanced Processing
-  use_llm_enhancement: true  # Enable LLM-based query understanding
-  llm_enhancement_mode: "always"  # Options: "adaptive", "always", "off"
+  use_llm_enhancement: false  # Disable LLM rewrite for deterministic local routing
+  llm_enhancement_mode: "off"  # Options: "adaptive", "always", "off"
   # - adaptive: Use LLM only for complex/implementation queries (recommended)
   # - always: Use LLM for all queries (slower, more accurate)
   # - off: Disable LLM enhancement (faster, rule-based only)
