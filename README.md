@@ -221,7 +221,7 @@ FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform be
    python web_app.py --host 0.0.0.0 --port 5000
 
    # Or use the CLI
-   python main.py --repo /path/to/your/repo --query "Your question here"
+   python main.py query --repo-path /path/to/your/repo --query "Your question here"
    ```
 
 </details>
@@ -279,7 +279,7 @@ FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform be
    python web_app.py --host 0.0.0.0 --port 5000
 
    # Or use the CLI
-   python main.py --repo /path/to/your/repo --query "Your question here"
+   python main.py query --repo-path /path/to/your/repo --query "Your question here"
    ```
 
 **Note for Apple Silicon (M1/M2/M3):** All dependencies are compatible with ARM architecture.
@@ -339,7 +339,7 @@ FastCode supports **Linux**, **macOS**, and **Windows**. Choose your platform be
    python web_app.py --host 0.0.0.0 --port 5000
 
    # Or use the CLI
-   python main.py --repo C:\path\to\your\repo --query "Your question here"
+   python main.py query --repo-path C:\path\to\your\repo --query "Your question here"
    ```
 
 **Troubleshooting:**
@@ -379,13 +379,13 @@ For automation and scripting:
 
 ```bash
 # Single repository query
-python main.py --repo /path/to/repo --query "Your question"
+python main.py query --repo-path /path/to/repo --query "Your question"
 
 # Multi-repository query
-python main.py --repos /path/to/repo1 /path/to/repo2 --query "Your question"
+python main.py query --repos /path/to/repo1 /path/to/repo2 --query "Your question"
 
 # With custom model
-python main.py --repo /path/to/repo --query "Your question" --model gpt-4-turbo
+python main.py query --repo-path /path/to/repo --query "Your question" --model gpt-4-turbo
 ```
 
 <details>
