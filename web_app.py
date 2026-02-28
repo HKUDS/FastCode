@@ -77,6 +77,14 @@ class StatusResponse(BaseModel):
     status: str
     repo_loaded: bool
     repo_indexed: bool
+
+
+class CheckFreshnessRequest(BaseModel):
+    repo_names: List[str] = Field(..., description="Repository names to check for updates")
+
+
+class RefreshRepoRequest(BaseModel):
+    repo_name: str = Field(..., description="Repository name to refresh")
     repo_info: Dict[str, Any]
     available_repositories: List[Dict[str, Any]] = Field(default_factory=list)
     loaded_repositories: List[Dict[str, Any]] = Field(default_factory=list)
@@ -782,14 +790,6 @@ async def get_session(session_id: str):
 class DeleteReposRequest(BaseModel):
     repo_names: List[str] = Field(..., description="Repository names to delete")
     delete_source: bool = Field(True, description="Also delete cloned source code in repos/")
-
-
-class CheckFreshnessRequest(BaseModel):
-    repo_names: List[str] = Field(..., description="Repository names to check for updates")
-
-
-class RefreshRepoRequest(BaseModel):
-    repo_name: str = Field(..., description="Repository name to refresh")
 
 
 @app.post("/api/delete-repos")
