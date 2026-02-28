@@ -42,7 +42,57 @@ def setup_logging(config: Dict[str, Any]) -> logging.Logger:
 def load_config(config_path: str = "config/config.yaml") -> Dict[str, Any]:
     """Load configuration from YAML file"""
     with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+
+    # Resolve relative paths against FastCode project root inferred from config path.
+    config_file = Path(config_path).resolve()
+    if config_file.parent.name == "config":
+        project_root = config_file.parent.parent
+    else:
+        project_root = config_file.parent
+
+    return resolve_config_paths(config, str(project_root))
+
+
+def resolve_config_paths(config: Dict[str, Any], project_root: str) -> Dict[str, Any]:
+    """
+    Resolve relative directory/file paths in config to absolute paths.
+
+    Paths are resolved against FastCode project_root so behavior is stable
+    regardless of the process current working directory.
+    """
+    if not config:
+        return config
+
+    root = os.path.abspath(project_root)
+
+    def _abs(path_value: Optional[str]) -> Optional[str]:
+        if not path_value:
+            return path_value
+        if os.path.isabs(path_value):
+            return os.path.abspath(path_value)
+        return os.path.abspath(os.path.join(root, path_value))
+
+    if "repo_root" in config:
+        config["repo_root"] = _abs(config.get("repo_root"))
+
+    vector_store_cfg = config.get("vector_store", {})
+    if isinstance(vector_store_cfg, dict) and "persist_directory" in vector_store_cfg:
+        vector_store_cfg["persist_directory"] = _abs(vector_store_cfg.get("persist_directory"))
+
+    repository_cfg = config.get("repository", {})
+    if isinstance(repository_cfg, dict) and "backup_directory" in repository_cfg:
+        repository_cfg["backup_directory"] = _abs(repository_cfg.get("backup_directory"))
+
+    cache_cfg = config.get("cache", {})
+    if isinstance(cache_cfg, dict) and "cache_directory" in cache_cfg:
+        cache_cfg["cache_directory"] = _abs(cache_cfg.get("cache_directory"))
+
+    logging_cfg = config.get("logging", {})
+    if isinstance(logging_cfg, dict) and "file" in logging_cfg:
+        logging_cfg["file"] = _abs(logging_cfg.get("file"))
+
+    return config
 
 
 def compute_file_hash(file_path: str) -> str:

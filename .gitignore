@@ -43,6 +43,7 @@ env/
 # Data and cache
 data/
 repos/
+repo_backup/
 logs/
 *.log
 

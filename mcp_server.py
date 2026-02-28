@@ -67,15 +67,10 @@ def _get_fastcode():
     return _fastcode_instance
 
 
-def _is_url(source: str) -> bool:
-    """Heuristic: treat as URL if it starts with http(s):// or git@."""
-    return source.startswith("http://") or source.startswith("https://") or source.startswith("git@")
-
-
-def _repo_name_from_source(source: str) -> str:
+def _repo_name_from_source(source: str, is_url: bool) -> str:
     """Derive a canonical repo name from a URL or local path."""
     from fastcode.utils import get_repo_name_from_url
-    if _is_url(source):
+    if is_url:
         return get_repo_name_from_url(source)
     # Local path: use the directory basename
     return os.path.basename(os.path.normpath(source))
@@ -146,7 +141,8 @@ def _ensure_repos_ready(repos: List[str], ctx=None) -> List[str]:
     ready_names: List[str] = []
 
     for source in repos:
-        name = _repo_name_from_source(source)
+        resolved_is_url = fc._infer_is_url(source)
+        name = _repo_name_from_source(source, resolved_is_url)
 
         # Already indexed – nothing to do
         if _is_repo_indexed(name):
@@ -157,9 +153,7 @@ def _ensure_repos_ready(repos: List[str], ctx=None) -> List[str]:
         # Need to index
         logger.info(f"Repo '{name}' not indexed. Preparing …")
 
-        is_url = _is_url(source)
-
-        if is_url:
+        if resolved_is_url:
             # Clone and index
             logger.info(f"Cloning {source} …")
             fc.load_repository(source, is_url=True)
@@ -378,7 +372,8 @@ def delete_repo_metadata(repo_name: str) -> str:
     """Delete indexed metadata for a repository while keeping source code.
 
     This removes vector/BM25/graph index artifacts and the repository's
-    overview entry from repo_overviews.pkl, but does NOT delete repos/<repo_name>.
+    overview entry from repo_overviews.pkl, but does NOT delete source files
+    from the configured repository workspace.
 
     Args:
         repo_name: Repository name to clean metadata for.

@@ -35,7 +35,10 @@ from fastcode import FastCode
 # Pydantic models
 class LoadRepositoryRequest(BaseModel):
     source: str = Field(..., description="Repository URL or local path")
-    is_url: bool = Field(True, description="True if source is URL, False if local path")
+    is_url: Optional[bool] = Field(
+        None,
+        description="True if source is URL, False if local path. If omitted, auto-detect."
+    )
 
 
 class QueryRequest(BaseModel):
@@ -359,17 +362,17 @@ async def upload_repository_zip(file: UploadFile = File(...)):
                 repo_name = repo_name[:-len(suffix)]
                 break
         
-        # Define repos directory (same as URL download)
-        repos_dir = Path("./repos")
-        repos_dir.mkdir(exist_ok=True)
+        # Use configured repository workspace directory
+        repo_workspace = getattr(fastcode_instance.loader, "safe_repo_root", "./repos")
+        repos_dir = Path(repo_workspace)
+        repos_dir.mkdir(parents=True, exist_ok=True)
         
         # Target repository path in repos directory
         repo_path = repos_dir / repo_name
         
-        # Remove existing repository if it exists (same behavior as URL download)
+        # Backup existing repository before overwrite
         if repo_path.exists():
-            logger.warning(f"Repository path {repo_path} already exists, removing...")
-            shutil.rmtree(repo_path)
+            fastcode_instance.loader._backup_existing_repo(str(repo_path))
         
         # Create temporary directory for ZIP extraction
         temp_dir = tempfile.mkdtemp(prefix="fastcode_upload_")

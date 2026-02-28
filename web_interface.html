@@ -324,7 +324,7 @@
                 </div>
 
                 <div id="url-mode" class="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                    <textarea id="repo-urls" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" rows="3" placeholder="https://github.com/owner/repo" oninput="updateUrlCount()"></textarea>
+                    <textarea id="repo-urls" class="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm font-mono focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none" rows="3" placeholder="https://github.com/HKUDS/nanobot&#10;/path/to/nanobot" oninput="updateUrlCount()"></textarea>
                     <div class="flex justify-between mt-4">
                         <span class="text-xs text-gray-500 mt-2" id="url-count">0 repos</span>
                         <div class="flex gap-2">
@@ -1018,7 +1018,11 @@
         
         try {
             if(!document.getElementById('url-mode').classList.contains('hidden')) {
-                const sources = document.getElementById('repo-urls').value.split('\n').filter(x=>x.trim()).map(x=>({source:x.trim(), is_url:true}));
+                // Let backend auto-detect local path vs URL when is_url is omitted.
+                const sources = document.getElementById('repo-urls').value
+                    .split('\n')
+                    .filter(x => x.trim())
+                    .map(x => ({ source: x.trim() }));
                 await fetch('/api/index-multiple', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({sources})});
             } else {
                  // Upload logic handles elsewhere or here

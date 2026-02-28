@@ -4,8 +4,8 @@ Repository Loader - Handle git cloning, local repository loading, and ZIP file e
 
 import os
 import shutil
-import tempfile
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 import logging
@@ -32,10 +32,54 @@ class RepositoryLoader:
         self.max_file_size_mb = self.repo_config.get("max_file_size_mb", 5)
         self.ignore_patterns = self.repo_config.get("ignore_patterns", [])
         self.supported_extensions = self.repo_config.get("supported_extensions", [])
+        self.safe_repo_root = os.path.abspath(self.config.get("repo_root", "./repos"))
+        ensure_dir(self.safe_repo_root)
+        configured_backup_root = self.repo_config.get("backup_directory")
+        if configured_backup_root:
+            self.repo_backup_root = os.path.abspath(configured_backup_root)
+        else:
+            self.repo_backup_root = os.path.join(os.path.dirname(self.safe_repo_root), "repo_backup")
+        ensure_dir(self.repo_backup_root)
         
         self.temp_dir = None
         self.repo_path = None
         self.repo_name = None
+
+    def _backup_existing_repo(self, repo_path: str) -> Optional[str]:
+        """Move existing repository directory to backup workspace."""
+        if not os.path.exists(repo_path):
+            return None
+
+        repo_name = os.path.basename(os.path.normpath(repo_path))
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        backup_name = f"{repo_name}_{timestamp}"
+        backup_path = os.path.join(self.repo_backup_root, backup_name)
+
+        suffix = 1
+        while os.path.exists(backup_path):
+            backup_path = os.path.join(self.repo_backup_root, f"{backup_name}_{suffix}")
+            suffix += 1
+
+        self.logger.warning(
+            f"Repository path {repo_path} already exists, moving to backup: {backup_path}"
+        )
+        try:
+            shutil.move(repo_path, backup_path)
+            return backup_path
+        except Exception as e:
+            raise RuntimeError(f"Failed to backup existing repository {repo_path}: {e}")
+
+    def _prepare_repo_path(self, repo_name: str, target_dir: Optional[str] = None) -> str:
+        """Prepare destination path under repository workspace."""
+        base_dir = target_dir or self.safe_repo_root
+        base_dir = os.path.abspath(base_dir)
+        ensure_dir(base_dir)
+        repo_path = os.path.join(base_dir, repo_name)
+
+        if os.path.exists(repo_path):
+            self._backup_existing_repo(repo_path)
+
+        return repo_path
     
     def load_from_url(self, url: str, target_dir: Optional[str] = None) -> str:
         """
@@ -53,19 +97,7 @@ class RepositoryLoader:
         # Get repository name
         self.repo_name = get_repo_name_from_url(url)
         
-        # Create target directory
-        if target_dir is None:
-            # self.temp_dir = tempfile.mkdtemp(prefix=f"fastcode_{self.repo_name}_")
-            target_dir = "./repos"
-        else:
-            ensure_dir(target_dir)
-        
-        self.repo_path = os.path.join(target_dir, self.repo_name)
-        
-        # Remove if already exists
-        if os.path.exists(self.repo_path):
-            self.logger.warning(f"Repository path {self.repo_path} already exists, removing...")
-            shutil.rmtree(self.repo_path)
+        self.repo_path = self._prepare_repo_path(self.repo_name, target_dir)
         
         try:
             # Clone with shallow depth for faster cloning
@@ -86,15 +118,16 @@ class RepositoryLoader:
             self.logger.error(f"Failed to clone repository: {e}")
             raise RuntimeError(f"Failed to clone repository: {e}")
     
-    def load_from_path(self, path: str) -> str:
+    def load_from_path(self, path: str, target_dir: Optional[str] = None) -> str:
         """
-        Load repository from local path
+        Copy local repository into repository workspace and load it.
         
         Args:
             path: Local path to repository
+            target_dir: Optional destination root (defaults to configured repo_root)
         
         Returns:
-            Path to repository
+            Path to copied repository
         """
         if not os.path.exists(path):
             raise ValueError(f"Path does not exist: {path}")
@@ -102,10 +135,23 @@ class RepositoryLoader:
         if not os.path.isdir(path):
             raise ValueError(f"Path is not a directory: {path}")
         
-        self.repo_path = os.path.abspath(path)
-        self.repo_name = os.path.basename(self.repo_path)
-        
-        self.logger.info(f"Loaded repository from {self.repo_path}")
+        source_path = os.path.abspath(path)
+        self.repo_name = os.path.basename(source_path)
+        destination_root = os.path.abspath(target_dir) if target_dir else self.safe_repo_root
+        destination_path = os.path.join(destination_root, self.repo_name)
+
+        # If source is already in workspace destination, use it directly.
+        if os.path.abspath(source_path) == os.path.abspath(destination_path):
+            self.repo_path = source_path
+            self.logger.info(f"Loaded repository from workspace path {self.repo_path}")
+            return self.repo_path
+
+        self.repo_path = self._prepare_repo_path(self.repo_name, target_dir)
+
+        # Copy entire working tree, including untracked files.
+        shutil.copytree(source_path, self.repo_path, symlinks=True)
+
+        self.logger.info(f"Copied repository from {source_path} to {self.repo_path}")
         return self.repo_path
     
     def load_from_zip(self, zip_path: str, target_dir: Optional[str] = None) -> str:
@@ -131,19 +177,7 @@ class RepositoryLoader:
         zip_basename = os.path.basename(zip_path)
         self.repo_name = os.path.splitext(zip_basename)[0]
         
-        # Create target directory
-        if target_dir is None:
-            self.temp_dir = tempfile.mkdtemp(prefix=f"fastcode_{self.repo_name}_")
-            target_dir = self.temp_dir
-        else:
-            ensure_dir(target_dir)
-        
-        extract_path = os.path.join(target_dir, self.repo_name)
-        
-        # Remove if already exists
-        if os.path.exists(extract_path):
-            self.logger.warning(f"Extract path {extract_path} already exists, removing...")
-            shutil.rmtree(extract_path)
+        extract_path = self._prepare_repo_path(self.repo_name, target_dir)
         
         try:
             # Extract ZIP file
@@ -151,17 +185,17 @@ class RepositoryLoader:
                 # Extract all files
                 zip_ref.extractall(extract_path)
             
-            # Check if ZIP contains a single root directory (common pattern)
-            # If so, use that as the repo path instead of the extract path
+            # If ZIP contains a single root directory, flatten it so repository
+            # always lives directly under repo workspace root/<repo_name>.
             contents = os.listdir(extract_path)
             if len(contents) == 1 and os.path.isdir(os.path.join(extract_path, contents[0])):
-                # Single root directory - use it directly
-                actual_repo_path = os.path.join(extract_path, contents[0])
                 self.logger.info(f"Detected single root directory: {contents[0]}")
-                self.repo_path = actual_repo_path
-            else:
-                # Multiple items at root level - use extract path
-                self.repo_path = extract_path
+                root_dir = os.path.join(extract_path, contents[0])
+                for name in os.listdir(root_dir):
+                    shutil.move(os.path.join(root_dir, name), os.path.join(extract_path, name))
+                shutil.rmtree(root_dir)
+
+            self.repo_path = extract_path
             
             self.logger.info(f"Successfully extracted to {self.repo_path}")
             

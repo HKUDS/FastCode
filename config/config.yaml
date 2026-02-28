@@ -3,12 +3,13 @@
 # Repository Root Path (optional)
 # Set this if you want to pre-configure the repository path for agency mode
 # This will be overridden when loading a repository dynamically
-repo_root: ./repos  # Set to "/path/to/your/repo" or leave as null
+repo_root: ./repos # safe repository path
 
 # Repository Settings
 repository:
   clone_depth: 1  # Shallow clone for faster processing
   max_file_size_mb: 5  # Skip files larger than this
+  backup_directory: "./repo_backup"  # Backup replaced repos before overwrite
   ignore_patterns:
     - "*.pyc"
     - "__pycache__"

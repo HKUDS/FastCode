@@ -5,11 +5,13 @@ Main FastCode Class - Orchestrate all components
 import os
 import pickle
 import logging
+import re
+from urllib.parse import urlparse
 from typing import Optional, Dict, Any, List, Callable
 import numpy as np
 from rank_bm25 import BM25Okapi
 
-from .utils import load_config, setup_logging, compute_file_hash, ensure_dir
+from .utils import load_config, resolve_config_paths, setup_logging, compute_file_hash, ensure_dir
 from .loader import RepositoryLoader
 from .parser import CodeParser
 from .embedder import CodeEmbedder
@@ -35,6 +37,9 @@ class FastCode:
         Args:
             config_path: Path to configuration file (default: config/config.yaml)
         """
+        # Resolve FastCode project root from package location.
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
         # Load configuration
         if config_path is None:
             # Try to find config in standard locations
@@ -53,6 +58,7 @@ class FastCode:
         else:
             # Use default configuration
             self.config = self._get_default_config()
+            self.config = resolve_config_paths(self.config, project_root)
         
         # Evaluation-specific overrides (keep core system decoupled)
         self.eval_config = self.config.get("evaluation", {})
@@ -106,22 +112,50 @@ class FastCode:
         # Multi-repository state
         self.multi_repo_mode = False
         self.loaded_repositories = {}  # {repo_name: repo_info}
+
+    @staticmethod
+    def _infer_is_url(source: str) -> bool:
+        """
+        Infer whether source should be treated as URL.
+
+        Priority rule: existing local paths always win over URL heuristics.
+        """
+        normalized = (source or "").strip()
+        if not normalized:
+            return False
+
+        if os.path.exists(normalized):
+            return False
+
+        parsed = urlparse(normalized)
+        if parsed.scheme in {"http", "https", "ssh", "git", "file"}:
+            return True
+
+        # SCP-like git syntax, e.g. git@github.com:user/repo.git
+        return bool(re.match(r"^[^@\s]+@[^:\s]+:[^\s]+$", normalized))
     
-    def load_repository(self, source: str, is_url: bool = True, is_zip: bool = False):
+    def load_repository(self, source: str, is_url: Optional[bool] = None, is_zip: bool = False):
         """
         Load repository from URL, local path, or ZIP file
         
         Args:
             source: Repository URL, local path, or ZIP file path
-            is_url: True if source is a URL, False if local path or ZIP
+            is_url: True if source is a URL, False if local path.
+                    If None, FastCode auto-detects source type.
             is_zip: True if source is a ZIP file, False otherwise
         """
         self.logger.info(f"Loading repository: {source}")
         
         try:
+            resolved_is_url = is_url
+            if not is_zip and resolved_is_url is None:
+                resolved_is_url = self._infer_is_url(source)
+                source_type = "URL" if resolved_is_url else "local path"
+                self.logger.info(f"Auto-detected source type as {source_type}: {source}")
+
             if is_zip:
                 self.loader.load_from_zip(source)
-            elif is_url:
+            elif resolved_is_url:
                 self.loader.load_from_url(source)
             else:
                 self.loader.load_from_path(source)
@@ -836,6 +870,7 @@ class FastCode:
             "repository": {
                 "clone_depth": 1,
                 "max_file_size_mb": 5,
+                "backup_directory": "./repo_backup",
                 "ignore_patterns": ["*.pyc", "__pycache__", "node_modules", ".git"],
                 "supported_extensions": [".py", ".js", ".ts", ".java", ".go"],
             },
@@ -904,16 +939,22 @@ class FastCode:
         
         for i, source_info in enumerate(sources):
             source = source_info.get('source')
-            is_url = source_info.get('is_url', True)
+            is_url = source_info.get('is_url')
             is_zip = source_info.get('is_zip', False)
             
             try:
                 self.logger.info(f"[{i+1}/{len(sources)}] Loading repository: {source}")
+
+                resolved_is_url = is_url
+                if not is_zip and resolved_is_url is None:
+                    resolved_is_url = self._infer_is_url(source)
+                    source_type = "URL" if resolved_is_url else "local path"
+                    self.logger.info(f"[{i+1}/{len(sources)}] Auto-detected source type as {source_type}")
                 
                 # Load repository
                 if is_zip:
                     self.loader.load_from_zip(source)
-                elif is_url:
+                elif resolved_is_url:
                     self.loader.load_from_url(source)
                 else:
                     self.loader.load_from_path(source)
@@ -1337,7 +1378,7 @@ class FastCode:
 
         # Remove cloned source code
         if delete_source:
-            repo_root = self.config.get("repo_root", "./repos")
+            repo_root = getattr(self.loader, "safe_repo_root", self.config.get("repo_root", "./repos"))
             repo_dir = os.path.join(repo_root, repo_name)
             if os.path.isdir(repo_dir):
                 dir_size = sum(
