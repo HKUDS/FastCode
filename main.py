@@ -116,7 +116,9 @@ def query(repo_url, repo_path, repo_zip, query, config, output, verbose, load_ca
             
             # Query
             click.echo(f"Processing query: {query}\n")
-            result = fastcode.query(query)
+            current_repo = fastcode.repo_info.get("name")
+            repo_filter = [current_repo] if current_repo else None
+            result = fastcode.query(query, repo_filter=repo_filter)
         
         # Format output
         formatted = fastcode.answer_generator.format_answer_with_sources(result)
@@ -371,6 +373,10 @@ def interactive(repo_url, repo_path, repo_zip, config, load_cache, repos, multi_
                         query = parts[1]
                         repo_filter = [r.strip() for r in repo_names_str.split(',')]
                         click.echo(f"Searching in: {', '.join(repo_filter)}")
+                elif not load_cache:
+                    current_repo = fastcode.repo_info.get("name")
+                    if current_repo:
+                        repo_filter = [current_repo]
                 
                 # Show processing indicator with agency mode info
                 if agency is True:
