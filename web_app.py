@@ -620,6 +620,34 @@ async def get_repository_summary():
     return summary_payload
 
 
+@app.post("/api/check-repo-freshness")
+async def check_repo_freshness(request: CheckFreshnessRequest):
+    """Check whether indexed repositories are up-to-date with their remotes."""
+    if fastcode_instance is None:
+        raise HTTPException(status_code=500, detail="FastCode not initialized")
+
+    results = []
+    for name in request.repo_names:
+        info = await asyncio.to_thread(fastcode_instance.check_repo_for_updates, name)
+        results.append(info)
+
+    return {"status": "success", "results": results}
+
+
+@app.post("/api/refresh-repo")
+async def refresh_repo(request: RefreshRepoRequest):
+    """Pull latest changes for a repository and re-index it."""
+    if fastcode_instance is None:
+        raise HTTPException(status_code=500, detail="FastCode not initialized")
+
+    result = await asyncio.to_thread(fastcode_instance.refresh_repository, request.repo_name)
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return {"status": "success", **result}
+
+
 @app.post("/api/clear-cache")
 async def clear_cache():
     """Clear cache"""
@@ -754,6 +782,14 @@ async def get_session(session_id: str):
 class DeleteReposRequest(BaseModel):
     repo_names: List[str] = Field(..., description="Repository names to delete")
     delete_source: bool = Field(True, description="Also delete cloned source code in repos/")
+
+
+class CheckFreshnessRequest(BaseModel):
+    repo_names: List[str] = Field(..., description="Repository names to check for updates")
+
+
+class RefreshRepoRequest(BaseModel):
+    repo_name: str = Field(..., description="Repository name to refresh")
 
 
 @app.post("/api/delete-repos")

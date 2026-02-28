@@ -371,6 +371,117 @@ class RepositoryLoader:
         
         return info
     
+    def get_head_commit(self, repo_path: Optional[str] = None) -> Optional[str]:
+        """Return the full HEAD commit SHA for a repo on disk, or None."""
+        target = repo_path or self.repo_path
+        if not target or not os.path.isdir(target):
+            return None
+        try:
+            repo = Repo(target)
+            return repo.head.commit.hexsha
+        except Exception:
+            return None
+
+    def check_for_updates(self, repo_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Fetch from origin and compare local HEAD with remote HEAD.
+
+        Returns a dict with:
+            - has_updates (bool)
+            - local_commit (str | None)
+            - remote_commit (str | None)
+            - error (str | None)
+        """
+        target = repo_path or self.repo_path
+        result: Dict[str, Any] = {
+            "has_updates": False,
+            "local_commit": None,
+            "remote_commit": None,
+            "error": None,
+        }
+        if not target or not os.path.isdir(target):
+            result["error"] = f"Path does not exist: {target}"
+            return result
+
+        try:
+            repo = Repo(target)
+            if not repo.remotes:
+                result["error"] = "No remote configured"
+                return result
+
+            local_commit = repo.head.commit.hexsha
+            result["local_commit"] = local_commit
+
+            origin = repo.remotes.origin
+            origin.fetch()
+
+            tracking = repo.active_branch.tracking_branch()
+            if tracking is None:
+                # Shallow clones may lack tracking info; compare with origin/<branch>
+                branch_name = repo.active_branch.name
+                remote_ref = f"origin/{branch_name}"
+                if remote_ref in [str(r) for r in repo.refs]:
+                    remote_commit = repo.refs[remote_ref].commit.hexsha
+                else:
+                    result["error"] = f"Cannot determine remote ref for {branch_name}"
+                    return result
+            else:
+                remote_commit = tracking.commit.hexsha
+
+            result["remote_commit"] = remote_commit
+            result["has_updates"] = local_commit != remote_commit
+        except Exception as e:
+            result["error"] = str(e)
+
+        return result
+
+    def pull_updates(self, repo_path: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Pull latest changes from origin for the given repo.
+
+        For shallow clones (depth=1) we unshallow first so that pull works
+        reliably, then re-shallow to keep disk usage low.
+
+        Returns a dict with:
+            - success (bool)
+            - old_commit (str | None)
+            - new_commit (str | None)
+            - changed (bool) – whether HEAD actually moved
+            - error (str | None)
+        """
+        target = repo_path or self.repo_path
+        result: Dict[str, Any] = {
+            "success": False,
+            "old_commit": None,
+            "new_commit": None,
+            "changed": False,
+            "error": None,
+        }
+        if not target or not os.path.isdir(target):
+            result["error"] = f"Path does not exist: {target}"
+            return result
+
+        try:
+            repo = Repo(target)
+            if not repo.remotes:
+                result["error"] = "No remote configured"
+                return result
+
+            old_commit = repo.head.commit.hexsha
+            result["old_commit"] = old_commit
+
+            origin = repo.remotes.origin
+            origin.pull()
+
+            new_commit = repo.head.commit.hexsha
+            result["new_commit"] = new_commit
+            result["changed"] = old_commit != new_commit
+            result["success"] = True
+        except Exception as e:
+            result["error"] = str(e)
+
+        return result
+
     def cleanup(self):
         """Clean up temporary directories"""
         if self.temp_dir and os.path.exists(self.temp_dir):

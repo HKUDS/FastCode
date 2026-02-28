@@ -700,6 +700,43 @@ async def delete_repositories(request: DeleteReposRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class CheckFreshnessRequest(BaseModel):
+    repo_names: List[str] = Field(..., description="Repository names to check for updates")
+
+
+class RefreshRepoRequest(BaseModel):
+    repo_name: str = Field(..., description="Repository name to refresh")
+
+
+@app.post("/check-repo-freshness")
+async def check_repo_freshness(request: CheckFreshnessRequest):
+    """Check whether indexed repositories are up-to-date with their remotes.
+
+    Performs a lightweight git fetch + SHA comparison without modifying the index.
+    """
+    fastcode = _ensure_fastcode_initialized()
+
+    results = []
+    for name in request.repo_names:
+        info = await asyncio.to_thread(fastcode.check_repo_for_updates, name)
+        results.append(info)
+
+    return {"status": "success", "results": results}
+
+
+@app.post("/refresh-repo")
+async def refresh_repo(request: RefreshRepoRequest):
+    """Pull latest changes for a repository and re-index it."""
+    fastcode = _ensure_fastcode_initialized()
+
+    result = await asyncio.to_thread(fastcode.refresh_repository, request.repo_name)
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    return {"status": "success", **result}
+
+
 @app.post("/clear-cache")
 async def clear_cache():
     """Clear cache"""
