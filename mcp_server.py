@@ -186,7 +186,12 @@ except (TypeError, ValueError):
     # If signature introspection fails, fall back to the safest constructor shape.
     pass
 
-mcp = FastMCP("FastCode", **_fastmcp_kwargs)
+mcp = FastMCP(
+    "FastCode",
+    host=os.getenv("FASTMCP_HOST", "0.0.0.0"),
+    port=int(os.getenv("FASTMCP_PORT", "8080")),
+    **_fastmcp_kwargs,
+)
 
 
 @mcp.tool()
@@ -419,6 +424,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.transport == "sse":
-        mcp.run(transport="sse", sse_params={"port": args.port})
+        mcp.run(transport="sse")
     else:
         mcp.run(transport="stdio")
