@@ -356,7 +356,7 @@ class RepositoryLoader:
             repo = Repo(self.repo_path)
             info.update({
                 "branch": repo.active_branch.name,
-                "commit": repo.head.commit.hexsha[:8],
+                "commit": repo.head.commit.hexsha,
                 "remote_url": repo.remotes.origin.url if repo.remotes else None,
             })
         except Exception:
