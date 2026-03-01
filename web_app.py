@@ -77,6 +77,9 @@ class StatusResponse(BaseModel):
     status: str
     repo_loaded: bool
     repo_indexed: bool
+    repo_info: Dict[str, Any]
+    available_repositories: List[Dict[str, Any]] = Field(default_factory=list)
+    loaded_repositories: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class CheckFreshnessRequest(BaseModel):
@@ -85,9 +88,6 @@ class CheckFreshnessRequest(BaseModel):
 
 class RefreshRepoRequest(BaseModel):
     repo_name: str = Field(..., description="Repository name to refresh")
-    repo_info: Dict[str, Any]
-    available_repositories: List[Dict[str, Any]] = Field(default_factory=list)
-    loaded_repositories: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 # Initialize FastAPI app
