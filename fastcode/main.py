@@ -277,8 +277,8 @@ class FastCode:
             
             # Save artifacts only when persistence is enabled
             if self._should_persist_indexes():
-                # Save to cache with repository-specific name
-                self._save_to_cache(cache_name=repo_name)
+                indexed_commit = self.repo_info.get("commit") or self.loader.get_head_commit()
+                self._save_to_cache(cache_name=repo_name, indexed_commit=indexed_commit)
 
                 # Save BM25 and graph data
                 self.retriever.save_bm25(repo_name)
@@ -713,7 +713,7 @@ class FastCode:
             self.logger.warning(f"Failed to load from cache: {e}")
             return False
     
-    def _save_to_cache(self, cache_name: Optional[str] = None):
+    def _save_to_cache(self, cache_name: Optional[str] = None, indexed_commit: Optional[str] = None):
         """Save indexed data to cache"""
         if not self._should_persist_indexes():
             self.logger.info("Cache save disabled (ephemeral/evaluation mode)")
@@ -722,7 +722,7 @@ class FastCode:
         try:
             if cache_name is None:
                 cache_name = self._get_cache_name()
-            self.vector_store.save(cache_name)
+            self.vector_store.save(cache_name, indexed_commit=indexed_commit)
             self.logger.info(f"Saved index to cache: {cache_name}")
         except Exception as e:
             self.logger.warning(f"Failed to save to cache: {e}")
@@ -998,7 +998,8 @@ class FastCode:
                     temp_vector_store.add_vectors(vectors_array, metadata)
                     
                     # Save this repository's vector index separately
-                    temp_vector_store.save(repo_name)
+                    indexed_commit = repo_info.get("commit") or self.loader.get_head_commit()
+                    temp_vector_store.save(repo_name, indexed_commit=indexed_commit)
                     
                     # Build and save BM25 index for this repository
                     temp_retriever = HybridRetriever(self.config, temp_vector_store, 
@@ -1272,6 +1273,98 @@ class FastCode:
             self.logger.error(traceback.format_exc())
             return False
     
+    def check_repo_for_updates(self, repo_name: str) -> Dict[str, Any]:
+        """
+        Check whether a previously-indexed repo has upstream changes or
+        local-disk changes since it was indexed.
+
+        Returns a dict with:
+            - stale (bool): True if the index is out of date
+            - indexed_commit (str | None)
+            - current_commit (str | None)
+            - remote_commit (str | None)
+            - has_remote_updates (bool)
+            - error (str | None)
+        """
+        result: Dict[str, Any] = {
+            "repo_name": repo_name,
+            "stale": False,
+            "indexed_commit": None,
+            "current_commit": None,
+            "remote_commit": None,
+            "has_remote_updates": False,
+            "error": None,
+        }
+
+        indexed_commit = self.vector_store.get_indexed_commit(repo_name)
+        result["indexed_commit"] = indexed_commit
+
+        repo_dir = os.path.join(self.loader.safe_repo_root, repo_name)
+        if not os.path.isdir(repo_dir):
+            result["error"] = f"Repo directory not found: {repo_dir}"
+            return result
+
+        current_commit = self.loader.get_head_commit(repo_dir)
+        result["current_commit"] = current_commit
+
+        # Local staleness: HEAD moved since we indexed (e.g. manual git pull)
+        if indexed_commit and current_commit and indexed_commit != current_commit:
+            result["stale"] = True
+
+        # Remote staleness: origin has newer commits
+        update_info = self.loader.check_for_updates(repo_dir)
+        if update_info.get("error"):
+            result["error"] = update_info["error"]
+        else:
+            result["remote_commit"] = update_info.get("remote_commit")
+            result["has_remote_updates"] = update_info.get("has_updates", False)
+            if update_info.get("has_updates"):
+                result["stale"] = True
+
+        return result
+
+    def refresh_repository(self, repo_name: str) -> Dict[str, Any]:
+        """
+        Pull latest changes for a repo and re-index it.
+
+        Returns a dict with pull results and indexing status.
+        """
+        result: Dict[str, Any] = {
+            "repo_name": repo_name,
+            "pulled": False,
+            "reindexed": False,
+            "old_commit": None,
+            "new_commit": None,
+            "error": None,
+        }
+
+        repo_dir = os.path.join(self.loader.safe_repo_root, repo_name)
+        if not os.path.isdir(repo_dir):
+            result["error"] = f"Repo directory not found: {repo_dir}"
+            return result
+
+        pull_result = self.loader.pull_updates(repo_dir)
+        result["old_commit"] = pull_result.get("old_commit")
+        result["new_commit"] = pull_result.get("new_commit")
+
+        if not pull_result.get("success"):
+            result["error"] = pull_result.get("error", "Pull failed")
+            return result
+
+        result["pulled"] = True
+
+        if not pull_result.get("changed"):
+            self.logger.info(f"No new commits for {repo_name}, skipping re-index")
+            result["reindexed"] = False
+            return result
+
+        # Re-load and re-index
+        self.load_repository(repo_dir, is_url=False)
+        self.index_repository(force=True)
+        self.vector_store.invalidate_scan_cache()
+        result["reindexed"] = True
+        return result
+
     def cleanup(self):
         """Cleanup resources"""
         self.loader.cleanup()

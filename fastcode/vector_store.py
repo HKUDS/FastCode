@@ -442,12 +442,13 @@ class VectorStore:
                 indices.append(i)
         return indices
     
-    def save(self, name: str = "index"):
+    def save(self, name: str = "index", indexed_commit: Optional[str] = None):
         """
         Save index and metadata to disk
         
         Args:
             name: Name for the saved files
+            indexed_commit: Git commit SHA that was indexed (stored for staleness detection)
         """
         if self.in_memory:
             self.logger.info("Skipping vector store save (in-memory mode enabled)")
@@ -464,13 +465,16 @@ class VectorStore:
         faiss.write_index(self.index, index_path)
         
         # Save metadata
+        payload = {
+            "metadata": self.metadata,
+            "dimension": self.dimension,
+            "distance_metric": self.distance_metric,
+            "index_type": self.index_type,
+        }
+        if indexed_commit:
+            payload["indexed_commit"] = indexed_commit
         with open(metadata_path, 'wb') as f:
-            pickle.dump({
-                "metadata": self.metadata,
-                "dimension": self.dimension,
-                "distance_metric": self.distance_metric,
-                "index_type": self.index_type,
-            }, f)
+            pickle.dump(payload, f)
         
         # Invalidate cache since we just modified the indexes
         self.invalidate_scan_cache()
@@ -524,6 +528,18 @@ class VectorStore:
             self.logger.error(f"Failed to load vector store: {e}")
             return False
     
+    def get_indexed_commit(self, name: str = "index") -> Optional[str]:
+        """Read the indexed_commit SHA from a saved metadata pickle without loading the full index."""
+        metadata_path = os.path.join(self.persist_dir, f"{name}_metadata.pkl")
+        if not os.path.exists(metadata_path):
+            return None
+        try:
+            with open(metadata_path, 'rb') as f:
+                data = pickle.load(f)
+            return data.get("indexed_commit")
+        except Exception:
+            return None
+
     def clear(self):
         """Clear all vectors and metadata"""
         if self.dimension:

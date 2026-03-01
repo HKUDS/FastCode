@@ -127,15 +127,25 @@ def _apply_forced_env_excludes(fc) -> None:
         logger.info(f"Added forced ignore patterns: {added}")
 
 
+_staleness_warnings: List[str] = []
+"""Per-call staleness warnings collected by _ensure_repos_ready."""
+
+
 def _ensure_repos_ready(repos: List[str], ctx=None) -> List[str]:
     """
     For each repo source string:
-      - If already indexed → skip
+      - If already indexed → check for staleness, warn if outdated
       - If URL and not on disk → clone + index
       - If local path → load + index
 
+    Staleness warnings are collected in the module-level ``_staleness_warnings``
+    list so callers (e.g. ``code_qa``) can append them to the response.
+
     Returns the list of canonical repo names that are ready.
     """
+    global _staleness_warnings
+    _staleness_warnings = []
+
     fc = _get_fastcode()
     _apply_forced_env_excludes(fc)
     ready_names: List[str] = []
@@ -144,10 +154,31 @@ def _ensure_repos_ready(repos: List[str], ctx=None) -> List[str]:
         resolved_is_url = fc._infer_is_url(source)
         name = _repo_name_from_source(source, resolved_is_url)
 
-        # Already indexed – nothing to do
+        # Already indexed – check freshness before moving on
         if _is_repo_indexed(name):
-            logger.info(f"Repo '{name}' already indexed, skipping.")
+            logger.info(f"Repo '{name}' already indexed, checking freshness …")
             ready_names.append(name)
+
+            try:
+                update_info = fc.check_repo_for_updates(name)
+                if update_info.get("stale"):
+                    short_old = (update_info.get("indexed_commit") or "unknown")[:8]
+                    short_new = (
+                        update_info.get("remote_commit")
+                        or update_info.get("current_commit")
+                        or "unknown"
+                    )[:8]
+                    msg = (
+                        f"Note: '{name}' index was built at commit {short_old} "
+                        f"but the repo is now at {short_new}. "
+                        f"Run the refresh_repo tool with repo_name=\"{name}\" "
+                        f"to pull latest changes and re-index."
+                    )
+                    _staleness_warnings.append(msg)
+                    logger.warning(msg)
+            except Exception as e:
+                logger.debug(f"Staleness check failed for '{name}': {e}")
+
             continue
 
         # Need to index
@@ -186,7 +217,12 @@ except (TypeError, ValueError):
     # If signature introspection fails, fall back to the safest constructor shape.
     pass
 
-mcp = FastMCP("FastCode", **_fastmcp_kwargs)
+mcp = FastMCP(
+    "FastCode",
+    host=os.getenv("FASTMCP_HOST", "0.0.0.0"),
+    port=int(os.getenv("FASTMCP_PORT", "8080")),
+    **_fastmcp_kwargs,
+)
 
 
 @mcp.tool()
@@ -266,6 +302,11 @@ def code_qa(
                     end = end or parsed_end
             loc = f"L{start}-L{end}" if start and end else ""
             parts.append(f"  - {repo}/{file_path}:{loc} ({name})" if repo else f"  - {file_path}:{loc} ({name})")
+
+    if _staleness_warnings:
+        parts.append("\n\n---\nRepository freshness:")
+        for warning in _staleness_warnings:
+            parts.append(f"  - {warning}")
 
     parts.append(f"\n[session_id: {sid}]")
     return "\n".join(parts)
@@ -368,6 +409,86 @@ def list_indexed_repos() -> str:
 
 
 @mcp.tool()
+def check_repo_freshness(repos: list[str]) -> str:
+    """Check whether indexed repositories are up-to-date with their remotes.
+
+    This is a lightweight check (git fetch + SHA comparison) that does NOT
+    modify the index. Use refresh_repo to actually pull and re-index.
+
+    Args:
+        repos: Repository sources (URLs or local paths) or repo names to check.
+
+    Returns:
+        A freshness report for each repository.
+    """
+    fc = _get_fastcode()
+    lines = ["Repository freshness report:"]
+
+    for source in repos:
+        resolved_is_url = fc._infer_is_url(source)
+        name = _repo_name_from_source(source, resolved_is_url)
+
+        if not _is_repo_indexed(name):
+            lines.append(f"  - {name}: not indexed")
+            continue
+
+        info = fc.check_repo_for_updates(name)
+        if info.get("error"):
+            lines.append(f"  - {name}: error checking — {info['error']}")
+        elif info.get("stale"):
+            indexed = (info.get("indexed_commit") or "unknown")[:8]
+            remote = (info.get("remote_commit") or info.get("current_commit") or "unknown")[:8]
+            lines.append(
+                f"  - {name}: OUTDATED (indexed {indexed}, latest {remote}) "
+                f"— use refresh_repo to update"
+            )
+        else:
+            commit = (info.get("indexed_commit") or "unknown")[:8]
+            lines.append(f"  - {name}: up-to-date ({commit})")
+
+    return "\n".join(lines)
+
+
+@mcp.tool()
+def refresh_repo(repo_name: str) -> str:
+    """Pull the latest changes for a repository and re-index it.
+
+    This performs a git pull on the cloned repo, then re-indexes if new
+    commits were found. Use check_repo_freshness first to see which repos
+    need refreshing.
+
+    Args:
+        repo_name: The repository name (as shown by list_indexed_repos).
+
+    Returns:
+        A summary of what changed and whether re-indexing occurred.
+    """
+    fc = _get_fastcode()
+    _apply_forced_env_excludes(fc)
+
+    if not _is_repo_indexed(repo_name):
+        return f"Repository '{repo_name}' is not indexed. Use code_qa to index it first."
+
+    result = fc.refresh_repository(repo_name)
+
+    if result.get("error"):
+        return f"Failed to refresh '{repo_name}': {result['error']}"
+
+    old = (result.get("old_commit") or "unknown")[:8]
+    new = (result.get("new_commit") or "unknown")[:8]
+
+    if not result.get("reindexed"):
+        return f"Repository '{repo_name}' is already up-to-date at {new}."
+
+    return (
+        f"Repository '{repo_name}' refreshed successfully.\n"
+        f"  Previous commit: {old}\n"
+        f"  Current commit:  {new}\n"
+        f"  Re-indexed: yes"
+    )
+
+
+@mcp.tool()
 def delete_repo_metadata(repo_name: str) -> str:
     """Delete indexed metadata for a repository while keeping source code.
 
@@ -419,6 +540,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.transport == "sse":
-        mcp.run(transport="sse", sse_params={"port": args.port})
+        mcp.run(transport="sse")
     else:
         mcp.run(transport="stdio")
