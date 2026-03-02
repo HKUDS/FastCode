@@ -28,7 +28,6 @@ FastCode = FastCode
 
 __all__ = [
     "FastCode",
-    "FastCode",
     "RepositoryLoader",
     "CodeParser",
     "CodeIndexer",
