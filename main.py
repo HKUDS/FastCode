@@ -940,6 +940,51 @@ def delete_session(session_id, config, confirm):
         sys.exit(1)
 
 
+@cli.command()
+@click.option('--repos', '-r', multiple=True, required=True, help='Repository names to check')
+@click.option('--config', '-c', help='Path to configuration file')
+def check_freshness(repos, config):
+    """Check whether indexed repositories are up-to-date with their remotes"""
+
+    fastcode = FastCode(config_path=config)
+
+    for name in repos:
+        info = fastcode.check_repo_for_updates(name)
+        if info.get("error"):
+            click.echo(f"  {name}: error — {info['error']}")
+        elif info.get("stale"):
+            indexed = (info.get("indexed_commit") or "unknown")[:8]
+            remote = (info.get("remote_commit") or info.get("current_commit") or "unknown")[:8]
+            click.echo(f"  {name}: OUTDATED (indexed {indexed}, latest {remote})")
+        else:
+            commit = (info.get("indexed_commit") or "unknown")[:8]
+            click.echo(f"  {name}: up-to-date ({commit})")
+
+
+@cli.command()
+@click.argument('repo_name')
+@click.option('--config', '-c', help='Path to configuration file')
+def refresh(repo_name, config):
+    """Pull latest changes for a repository and re-index it"""
+
+    fastcode = FastCode(config_path=config)
+
+    click.echo(f"Refreshing '{repo_name}' …")
+    result = fastcode.refresh_repository(repo_name)
+
+    if result.get("error"):
+        click.echo(f"Error: {result['error']}", err=True)
+        sys.exit(1)
+
+    old = (result.get("old_commit") or "unknown")[:8]
+    new = (result.get("new_commit") or "unknown")[:8]
+
+    if result.get("reindexed"):
+        click.echo(f"Refreshed {repo_name}: {old} -> {new} (re-indexed)")
+    else:
+        click.echo(f"Already up-to-date at {new}")
+
+
 if __name__ == '__main__':
     cli()
 
