@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/hkuds-fastcode-badge.png)](https://mseep.ai/app/hkuds-fastcode)
+
 <div align="center">
 
 <img src="assets/FastCode.svg" alt="FastCode Logo" width="200"/>
