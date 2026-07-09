@@ -15,6 +15,7 @@ from .utils import (
     is_supported_file,
     should_ignore_path,
     get_repo_name_from_url,
+    get_repo_name_from_path,
     normalize_path,
     ensure_dir,
 )
@@ -135,9 +136,12 @@ class RepositoryLoader:
         if not os.path.isdir(path):
             raise ValueError(f"Path is not a directory: {path}")
         
-        source_path = os.path.abspath(path)
-        self.repo_name = os.path.basename(source_path)
         destination_root = os.path.abspath(target_dir) if target_dir else self.safe_repo_root
+        source_path = os.path.abspath(path)
+        self.repo_name = get_repo_name_from_path(
+            source_path,
+            workspace_root=destination_root,
+        )
         destination_path = os.path.join(destination_root, self.repo_name)
 
         # If source is already in workspace destination, use it directly.
@@ -381,4 +385,3 @@ class RepositoryLoader:
     def __del__(self):
         """Cleanup on deletion"""
         self.cleanup()
-

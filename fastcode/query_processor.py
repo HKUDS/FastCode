@@ -533,7 +533,7 @@ class QueryProcessor:
             else:
                 return {}
 
-            print(f"LLM response of _enhance_with_llm: {response}")
+            self.logger.debug("LLM enhancement response received")
             
             # Parse LLM response
             enhancements = self._parse_llm_response(response, intent)
@@ -825,4 +825,3 @@ Be concise and focus on improving code retrieval accuracy."""
             rewritten = rewritten[1:-1]
         
         return rewritten if rewritten else None
-

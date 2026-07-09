@@ -501,7 +501,7 @@ class HybridRetriever:
         # 2. get top k
         for repo_name, scores in sorted_repos[:top_k]:
             selected_repos.append(repo_name)
-            print(
+            self.logger.info(
                 f"Selected repo: {repo_name} "
                 f"(semantic: {scores['semantic_score']:.3f}, "
                 f"bm25: {scores['bm25_score']:.3f}, "
@@ -510,7 +510,9 @@ class HybridRetriever:
             
         # 3. no repo selected
         if not selected_repos:
-            print(f"No repositories met the minimum score threshold of {MIN_SCORE_THRESHOLD}")
+            self.logger.info(
+                f"No repositories met the minimum score threshold of {MIN_SCORE_THRESHOLD}"
+            )
         
         return selected_repos
 
@@ -1440,4 +1442,3 @@ class HybridRetriever:
             self.logger.error(traceback.format_exc())
             # Fallback to original results
             return results
-

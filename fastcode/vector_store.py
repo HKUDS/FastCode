@@ -336,7 +336,9 @@ class VectorStore:
                 distance = float(np.linalg.norm(query_vector - embedding))
                 similarity = 1.0 / (1.0 + distance)
             
-            print(f"similarity: {similarity}, repo_name: {repo_name}")
+            self.logger.debug(
+                f"Repository overview similarity for {repo_name}: {similarity:.4f}"
+            )
             
             # Apply minimum score filter
             if min_score is not None and similarity < min_score:
@@ -752,4 +754,3 @@ class VectorStore:
         """Invalidate the scan cache (call this when indexes change)"""
         self._index_scan_cache = None
         self.logger.debug("Invalidated index scan cache")
-

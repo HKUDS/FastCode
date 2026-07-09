@@ -310,6 +310,27 @@ def get_repo_name_from_url(url: str) -> str:
     return parts[-1] if parts else "unknown_repo"
 
 
+def get_repo_name_from_path(path: str, workspace_root: Optional[str] = None) -> str:
+    """Derive a stable local repository identifier from its absolute path."""
+    normalized = normalize_path(os.path.abspath(path or ""))
+    base_name = os.path.basename(normalized.rstrip("/")) or "local_repo"
+
+    if workspace_root:
+        normalized_root = normalize_path(os.path.abspath(workspace_root))
+        parent_dir = normalize_path(os.path.dirname(normalized.rstrip("/")))
+        suffix = base_name.rsplit("-", 1)
+        if (
+            parent_dir == normalized_root
+            and len(suffix) == 2
+            and len(suffix[1]) == 8
+            and all(ch in "0123456789abcdef" for ch in suffix[1].lower())
+        ):
+            return base_name
+
+    digest = hashlib.md5(normalized.encode("utf-8")).hexdigest()[:8]
+    return f"{base_name}-{digest}"
+
+
 def clean_docstring(docstring: str) -> str:
     """Clean and format docstring"""
     if not docstring:
@@ -335,4 +356,3 @@ def clean_docstring(docstring: str) -> str:
                  for line in lines]
     
     return "\n".join(lines).strip()
-

@@ -213,9 +213,9 @@ class FastCode:
             # Index code elements with repository information
             elements = self.indexer.index_repository(repo_name=repo_name, repo_url=repo_url)
             
-            # Initialize vector store if not already done
-            if self.vector_store.dimension is None:
-                self.vector_store.initialize(self.embedder.embedding_dim)
+            # Single-repository indexing should always build a fresh in-memory
+            # index so saved artifacts never mix metadata from prior repos.
+            self.vector_store.initialize(self.embedder.embedding_dim)
             
             # Add embeddings to vector store
             vectors = []
@@ -267,9 +267,14 @@ class FastCode:
                 self.module_resolver = None
                 self.symbol_resolver = None
 
-            # Build code graphs with resolvers
-            # This will now use the initialized resolvers to build precise graphs
-            self.graph_builder.build_graphs(elements, self.module_resolver, self.symbol_resolver)
+            # Build code graphs with a fresh builder so per-repo saves never
+            # retain nodes or edges from a previous repository.
+            fresh_graph_builder = CodeGraphBuilder(self.config)
+            fresh_graph_builder.build_graphs(
+                elements, self.module_resolver, self.symbol_resolver
+            )
+            self.graph_builder = fresh_graph_builder
+            self.retriever.graph_builder = self.graph_builder
             
             # Index for BM25
             self.retriever.index_for_bm25(elements)
@@ -674,38 +679,46 @@ class FastCode:
             # Try to load vector store
             if self.vector_store.load(cache_name):
                 self.logger.info(f"Loaded vector store from cache for {cache_name}")
-                
+
                 # Load BM25 index
                 bm25_loaded = self.retriever.load_bm25(cache_name)
                 if not bm25_loaded:
                     self.logger.warning("Failed to load BM25 index, will need to rebuild")
-                
+
                 # Build separate repo overview BM25 index
                 self.retriever.build_repo_overview_bm25()
-                
-                # Load graph data
-                graph_loaded = self.graph_builder.load(cache_name)
+
+                # Load graph data into a fresh builder so stale state is never reused.
+                fresh_graph_builder = CodeGraphBuilder(self.config)
+                graph_loaded = fresh_graph_builder.load(cache_name)
                 if not graph_loaded:
                     self.logger.warning("Failed to load graph data, will need to rebuild")
-                
+
                 # If BM25 or graph failed to load, reconstruct from metadata
                 if not bm25_loaded or not graph_loaded:
                     self.logger.info("Reconstructing missing components from metadata...")
-                    elements = self._reconstruct_elements_from_metadata()
-                    
+                    elements = (
+                        self.retriever.full_bm25_elements
+                        if bm25_loaded and self.retriever.full_bm25_elements
+                        else self._reconstruct_elements_from_metadata()
+                    )
+
                     if elements:
                         if not bm25_loaded:
                             self.retriever.index_for_bm25(elements)
                             self.logger.info(f"Rebuilt BM25 index with {len(elements)} elements")
-                        
+
                         if not graph_loaded:
                             # Note: Rebuilding graph from metadata is a fallback.
                             # Precise linking might be limited if repo_root context is lost.
-                            self.graph_builder.build_graphs(elements)
+                            fresh_graph_builder.build_graphs(elements)
+                            graph_loaded = True
                             self.logger.info("Rebuilt code graph (fallback mode)")
                     else:
                         self.logger.warning("No elements reconstructed from metadata")
-                
+
+                self.graph_builder = fresh_graph_builder
+                self.retriever.graph_builder = self.graph_builder
                 self.logger.info("Cache loaded successfully")
                 self._log_statistics()
                 return True
@@ -1039,6 +1052,10 @@ class FastCode:
 
                     temp_graph_builder.build_graphs(elements, temp_module_resolver, temp_symbol_resolver)
                     temp_graph_builder.save(repo_name)
+                    self._save_file_manifest(
+                        repo_name,
+                        self._build_file_manifest(elements, self.loader.repo_path),
+                    )
                     self.logger.info(f"Saved graph data for {repo_name}")
                     
                     successfully_indexed.append(repo_name)
@@ -1138,6 +1155,25 @@ class FastCode:
         Returns:
             True if successful, False otherwise
         """
+        def invalidate_in_memory_state() -> None:
+            self.loaded_repositories = {}
+            self.repo_indexed = False
+            self.repo_loaded = False
+            self.multi_repo_mode = False
+
+            retriever = getattr(self, "retriever", None)
+            if retriever is not None:
+                if hasattr(retriever, "current_loaded_repos"):
+                    retriever.current_loaded_repos = None
+                if hasattr(retriever, "filtered_vector_store"):
+                    retriever.filtered_vector_store = None
+                if hasattr(retriever, "filtered_bm25"):
+                    retriever.filtered_bm25 = None
+                if hasattr(retriever, "filtered_bm25_corpus"):
+                    retriever.filtered_bm25_corpus = []
+                if hasattr(retriever, "filtered_bm25_elements"):
+                    retriever.filtered_bm25_elements = []
+
         try:
             # Discover available repository indexes
             persist_dir = self.vector_store.persist_dir
@@ -1153,6 +1189,7 @@ class FastCode:
             
             if not available_repos:
                 self.logger.error("No repository indexes found")
+                invalidate_in_memory_state()
                 return False
             
             # Filter repositories if specific ones are requested
@@ -1160,6 +1197,14 @@ class FastCode:
                 repos_to_load = [r for r in available_repos if r in repo_names]
                 if not repos_to_load:
                     self.logger.error(f"None of the requested repositories found: {repo_names}")
+                    invalidate_in_memory_state()
+                    return False
+                missing_repos = sorted(set(repo_names) - set(repos_to_load))
+                if missing_repos:
+                    self.logger.error(
+                        f"Requested repositories are missing from cache: {', '.join(missing_repos)}"
+                    )
+                    invalidate_in_memory_state()
                     return False
             else:
                 repos_to_load = available_repos
@@ -1167,46 +1212,72 @@ class FastCode:
             self.logger.info(f"Found {len(repos_to_load)} repository indexes: {', '.join(repos_to_load)}")
             
             # Always reinitialize for clean merge
+            previously_loaded = dict(self.loaded_repositories)
             self.vector_store.initialize(self.embedder.embedding_dim)
+            # The previous in-memory state is no longer valid once the merged
+            # vector store is rebuilt. Clear it up front so partial reload
+            # failures cannot leave stale repos marked as loaded.
+            self.loaded_repositories = {}
+            self.repo_indexed = False
+            self.repo_loaded = False
+            self.multi_repo_mode = False
+            if hasattr(self.retriever, "current_loaded_repos"):
+                self.retriever.current_loaded_repos = None
             
             # Load each repository index and merge them
+            successfully_loaded = []
             for repo_name in repos_to_load:
                 self.logger.info(f"Loading index for {repo_name}...")
                 try:
                     # Merge this repository's index into the main vector store
                     if self.vector_store.merge_from_index(repo_name):
                         self.logger.info(f"Successfully merged {repo_name}")
+                        successfully_loaded.append(repo_name)
                     else:
                         self.logger.warning(f"Failed to merge index for {repo_name}")
                         
                 except Exception as e:
                     self.logger.error(f"Error loading {repo_name}: {e}")
                     continue
-            
+
+            if repo_names and set(successfully_loaded) != set(repos_to_load):
+                missing_repos = sorted(set(repos_to_load) - set(successfully_loaded))
+                self.logger.error(
+                    f"Failed to load all requested repositories: {', '.join(missing_repos)}"
+                )
+                invalidate_in_memory_state()
+                return False
+
             # Check if we successfully loaded any repositories
             if self.vector_store.get_count() == 0:
                 self.logger.error("Failed to load any repository indexes")
+                invalidate_in_memory_state()
                 return False
             
-            # Register loaded repositories
-            # We know which repos were successfully loaded from repos_to_load
-            for repo_name in repos_to_load:
-                if repo_name not in self.loaded_repositories:
-                    self.loaded_repositories[repo_name] = {
-                        "name": repo_name,
-                        "file_count": 0,  # Will be updated if needed
-                        "total_size_mb": 0,
-                    }
+            # Register only the repositories that are actually present in memory.
+            self.loaded_repositories = {}
+            for repo_name in successfully_loaded:
+                repo_info = previously_loaded.get(repo_name, {})
+                self.loaded_repositories[repo_name] = {
+                    "name": repo_name,
+                    "file_count": repo_info.get("file_count", 0),
+                    "total_size_mb": repo_info.get("total_size_mb", 0),
+                    **({"url": repo_info["url"]} if "url" in repo_info else {}),
+                    **({"path": repo_info["path"]} if "path" in repo_info else {}),
+                }
             
             # Try to load BM25 and graph data from saved files
             # For multi-repo, we merge BM25 data from all loaded repositories
             self.logger.info("Loading BM25 and graph data...")
-            
+
             all_bm25_elements = []
             all_bm25_corpus = []
+            bm25_cache_complete = True
+            fresh_graph_builder = CodeGraphBuilder(self.config)
             graphs_loaded = False
-            
-            for repo_name in repos_to_load:
+            graph_cache_complete = True
+
+            for repo_name in successfully_loaded:
                 # Try loading BM25 for each repo
                 bm25_path = os.path.join(self.retriever.persist_dir, f"{repo_name}_bm25.pkl")
                 if os.path.exists(bm25_path):
@@ -1222,41 +1293,63 @@ class FastCode:
                         self.logger.info(f"Loaded BM25 data for {repo_name}")
                     except Exception as e:
                         self.logger.warning(f"Failed to load BM25 data for {repo_name}: {e}")
+                        bm25_cache_complete = False
+                else:
+                    self.logger.warning(f"BM25 data not found for {repo_name}")
+                    bm25_cache_complete = False
                 
                 # Load graph data (merge into main graph)
                 if not graphs_loaded:
                     # Load the first repository's graph as base
-                    if self.graph_builder.load(repo_name):
+                    if fresh_graph_builder.load(repo_name):
                         graphs_loaded = True
                         self.logger.info(f"Loaded graph data from {repo_name} as base")
+                    else:
+                        graph_cache_complete = False
                 else:
                     # Merge additional repository graphs
-                    if self.graph_builder.merge_from_file(repo_name):
+                    if fresh_graph_builder.merge_from_file(repo_name):
                         self.logger.info(f"Merged graph data from {repo_name}")
                     else:
                         self.logger.warning(f"Failed to merge graph data from {repo_name}")
-                    # TODO: Merge additional repository graphs if needed
+                        graph_cache_complete = False
+
             # Rebuild FULL BM25 index with merged data (for repository selection)
-            if all_bm25_elements and all_bm25_corpus:
+            if all_bm25_elements and all_bm25_corpus and bm25_cache_complete:
                 self.retriever.full_bm25_elements = all_bm25_elements
                 self.retriever.full_bm25_corpus = all_bm25_corpus
                 self.retriever.full_bm25 = BM25Okapi(all_bm25_corpus)
                 self.logger.info(f"Rebuilt full BM25 index with {len(all_bm25_elements)} merged elements")
             else:
                 # Fallback: reconstruct from metadata
-                self.logger.info("No BM25 data found, reconstructing from metadata...")
+                if bm25_cache_complete:
+                    self.logger.info("No BM25 data found, reconstructing from metadata...")
+                else:
+                    self.logger.info("BM25 cache incomplete, reconstructing from metadata...")
                 elements = self._reconstruct_elements_from_metadata()
-                
+
                 if elements:
                     self.retriever.index_for_bm25(elements)
                     self.logger.info(f"Rebuilt BM25 index with {len(elements)} elements")
-                    
-                    if not graphs_loaded:
-                        self.graph_builder.build_graphs(elements)
-                        self.logger.info("Rebuilt code graph")
                 else:
                     self.logger.warning("No elements reconstructed from metadata")
-            
+
+            if not graphs_loaded or not graph_cache_complete:
+                elements = (
+                    self.retriever.full_bm25_elements
+                    if self.retriever.full_bm25_elements
+                    else self._reconstruct_elements_from_metadata()
+                )
+                if elements:
+                    fresh_graph_builder = CodeGraphBuilder(self.config)
+                    fresh_graph_builder.build_graphs(elements)
+                    graphs_loaded = True
+                    self.logger.info("Rebuilt code graph")
+                else:
+                    self.logger.warning("No elements available to rebuild graph data")
+
+            self.graph_builder = fresh_graph_builder
+            self.retriever.graph_builder = self.graph_builder
             # Build separate BM25 index for repository overviews
             self.retriever.build_repo_overview_bm25()
             self.logger.info("Built separate BM25 index for repository overviews")
@@ -1272,6 +1365,7 @@ class FastCode:
             self.logger.error(f"Failed to load multi-repo cache: {e}")
             import traceback
             self.logger.error(traceback.format_exc())
+            invalidate_in_memory_state()
             return False
     
     # ------------------------------------------------------------------
@@ -1330,20 +1424,19 @@ class FastCode:
             self.logger.warning(f"Failed to load manifest for '{repo_name}': {e}")
             return None
 
-    def _load_existing_metadata(self, repo_name: str) -> list:
-        """Load existing vector store metadata for a repo directly from disk."""
+    def _load_existing_metadata(self, repo_name: str) -> dict:
+        """Load an existing vector store payload for a repo directly from disk."""
         meta_path = os.path.join(
             self.vector_store.persist_dir, f"{repo_name}_metadata.pkl"
         )
         if not os.path.exists(meta_path):
-            return []
+            return {}
         try:
             with open(meta_path, "rb") as f:
-                data = pickle.load(f)
-            return data.get("metadata", [])
+                return pickle.load(f)
         except Exception as e:
             self.logger.warning(f"Failed to load metadata for '{repo_name}': {e}")
-            return []
+            return {}
 
     def _detect_file_changes(self, repo_name, current_files):
         """Compare current files against saved manifest to detect changes.
@@ -1440,7 +1533,8 @@ class FastCode:
             return {"status": "path_not_found", "changes": 0}
 
         self.loader.load_from_path(repo_path)
-        self.config["repo_root"] = repo_path
+        effective_repo_path = self.loader.repo_path or repo_path
+        self.config["repo_root"] = effective_repo_path
 
         # 3. Scan current files and detect changes
         current_files = self.loader.scan_files()
@@ -1462,10 +1556,32 @@ class FastCode:
             return {"status": "no_changes", "changes": 0}
 
         # 4. Load existing metadata from disk
-        existing_metadata = self._load_existing_metadata(repo_name)
+        existing_payload = self._load_existing_metadata(repo_name)
+        if isinstance(existing_payload, dict) and "metadata" in existing_payload:
+            existing_metadata = existing_payload.get("metadata", [])
+            persisted_dimension = existing_payload.get("dimension")
+        else:
+            existing_metadata = existing_payload or []
+            persisted_dimension = None
+
         if not existing_metadata:
             self.logger.warning(f"No existing metadata for '{repo_name}'")
             return {"status": "no_metadata", "changes": 0}
+
+        current_dimension = self.embedder.embedding_dim
+        if persisted_dimension is not None and persisted_dimension != current_dimension:
+            self.logger.warning(
+                "Embedding dimension mismatch for '%s': persisted=%s current=%s",
+                repo_name,
+                persisted_dimension,
+                current_dimension,
+            )
+            return {
+                "status": "embedding_mismatch",
+                "changes": total_changes,
+                "persisted_dimension": persisted_dimension,
+                "current_dimension": current_dimension,
+            }
 
         # 5. Collect unchanged elements (with pre-computed embeddings)
         unchanged_elements, _ = self._collect_unchanged_elements(
@@ -1520,13 +1636,28 @@ class FastCode:
 
         # 8. Rebuild FAISS (temporary store — main instance untouched)
         temp_store = VectorStore(self.config)
-        temp_store.initialize(self.embedder.embedding_dim)
+        temp_store.initialize(current_dimension)
 
         vectors, metadata_list = [], []
         for elem in all_elements:
             embedding = elem.metadata.get("embedding")
             if embedding is not None:
-                vectors.append(embedding)
+                embedding_array = np.asarray(embedding, dtype=np.float32)
+                if embedding_array.ndim != 1 or embedding_array.shape[0] != current_dimension:
+                    self.logger.warning(
+                        "Embedding shape mismatch for '%s' element '%s': expected=%s got=%s",
+                        repo_name,
+                        elem.id,
+                        current_dimension,
+                        tuple(embedding_array.shape),
+                    )
+                    return {
+                        "status": "embedding_mismatch",
+                        "changes": total_changes,
+                        "persisted_dimension": persisted_dimension,
+                        "current_dimension": current_dimension,
+                    }
+                vectors.append(embedding_array)
                 metadata_list.append(elem.to_dict())
 
         if vectors:
@@ -1535,7 +1666,7 @@ class FastCode:
         # 9. Rebuild BM25 (temporary retriever)
         temp_retriever = HybridRetriever(
             self.config, temp_store, self.embedder,
-            CodeGraphBuilder(self.config), repo_root=repo_path,
+            CodeGraphBuilder(self.config), repo_root=effective_repo_path,
         )
         temp_retriever.index_for_bm25(all_elements)
 
@@ -1544,7 +1675,7 @@ class FastCode:
         module_resolver, symbol_resolver = None, None
         try:
             gib = GlobalIndexBuilder(self.config)
-            gib.build_maps(all_elements, repo_path)
+            gib.build_maps(all_elements, effective_repo_path)
             module_resolver = ModuleResolver(gib)
             symbol_resolver = SymbolResolver(gib, module_resolver)
         except Exception as e:
@@ -1552,12 +1683,34 @@ class FastCode:
 
         temp_graph.build_graphs(all_elements, module_resolver, symbol_resolver)
 
+        # Refresh repository overview so repo-level selection and summaries stay in sync.
+        overview_generator = getattr(self.indexer, "overview_generator", None)
+        if overview_generator and effective_repo_path:
+            try:
+                file_structure = overview_generator.parse_file_structure(
+                    effective_repo_path, current_files
+                )
+                repo_overview = overview_generator.generate_overview(
+                    effective_repo_path, repo_name, file_structure
+                )
+                repo_url = (
+                    self.loaded_repositories.get(repo_name, {}).get("url")
+                    or self.loaded_repositories.get(repo_name, {}).get("remote_url")
+                )
+                self.indexer.current_repo_name = repo_name
+                self.indexer.current_repo_url = repo_url
+                self.indexer._save_repository_overview(repo_overview)
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to refresh repository overview for '{repo_name}': {e}"
+                )
+
         # 11. Save all artifacts
         if self._should_persist_indexes():
             temp_store.save(repo_name)
             temp_retriever.save_bm25(repo_name)
             temp_graph.save(repo_name)
-            new_manifest = self._build_file_manifest(all_elements, repo_path)
+            new_manifest = self._build_file_manifest(all_elements, effective_repo_path)
             self._save_file_manifest(repo_name, new_manifest)
             self.logger.info(f"Saved all artifacts for '{repo_name}'")
 

@@ -69,11 +69,45 @@ def _get_fastcode():
 
 def _repo_name_from_source(source: str, is_url: bool) -> str:
     """Derive a canonical repo name from a URL or local path."""
-    from fastcode.utils import get_repo_name_from_url
+    from fastcode.utils import get_repo_name_from_path, get_repo_name_from_url
+
+    def repo_index_files_exist(persist_dir: Optional[str], repo_name: Optional[str]) -> bool:
+        if not persist_dir or not repo_name:
+            return False
+        faiss_path = os.path.join(persist_dir, f"{repo_name}.faiss")
+        meta_path = os.path.join(persist_dir, f"{repo_name}_metadata.pkl")
+        return os.path.exists(faiss_path) and os.path.exists(meta_path)
+
+    def strip_repo_hash_suffix(repo_name: str) -> Optional[str]:
+        base_name, sep, suffix = repo_name.rpartition("-")
+        if not sep or len(suffix) != 8:
+            return None
+        if not all(ch in "0123456789abcdef" for ch in suffix.lower()):
+            return None
+        return base_name or None
+
     if is_url:
         return get_repo_name_from_url(source)
-    # Local path: use the directory basename
-    return os.path.basename(os.path.normpath(source))
+
+    workspace_root = None
+    persist_dir = None
+    try:
+        fc = _get_fastcode()
+        workspace_root = getattr(getattr(fc, "loader", None), "safe_repo_root", None)
+        persist_dir = getattr(getattr(fc, "vector_store", None), "persist_dir", None)
+    except Exception:
+        workspace_root = None
+        persist_dir = None
+
+    repo_name = get_repo_name_from_path(source, workspace_root=workspace_root)
+    if repo_index_files_exist(persist_dir, repo_name):
+        return repo_name
+
+    legacy_name = strip_repo_hash_suffix(repo_name)
+    if repo_index_files_exist(persist_dir, legacy_name):
+        return legacy_name
+
+    return repo_name
 
 
 def _is_repo_indexed(repo_name: str) -> bool:
@@ -127,6 +161,49 @@ def _apply_forced_env_excludes(fc) -> None:
         logger.info(f"Added forced ignore patterns: {added}")
 
 
+def _invalidate_loaded_state(fc) -> None:
+    """Mark in-memory indexes as stale so the next request reloads from disk."""
+    fc.repo_indexed = False
+    fc.repo_loaded = False
+    fc.multi_repo_mode = False
+    fc.loaded_repositories.clear()
+
+    retriever = getattr(fc, "retriever", None)
+    if retriever is not None and hasattr(retriever, "current_loaded_repos"):
+        retriever.current_loaded_repos = None
+
+
+def _run_full_reindex(
+    repo_source: str, resolved_is_url: bool, repo_name: Optional[str] = None
+) -> dict:
+    """Reindex using a clean FastCode instance to avoid mixed in-memory artifacts."""
+    from fastcode import FastCode
+
+    reindex_fc = FastCode()
+    _apply_forced_env_excludes(reindex_fc)
+
+    if resolved_is_url:
+        reindex_fc.load_repository(repo_source, is_url=True)
+    else:
+        abs_path = os.path.abspath(repo_source)
+        if not os.path.isdir(abs_path):
+            return {"status": "path_not_found", "count": 0, "path": abs_path}
+        reindex_fc.load_repository(abs_path, is_url=False)
+
+    if repo_name:
+        reindex_fc.repo_info["name"] = repo_name
+        if hasattr(reindex_fc.loader, "repo_name"):
+            reindex_fc.loader.repo_name = repo_name
+
+    reindex_fc.index_repository(force=True)
+    count = reindex_fc.vector_store.get_count()
+
+    if _fastcode_instance is not None:
+        _invalidate_loaded_state(_fastcode_instance)
+
+    return {"status": "success", "count": count}
+
+
 def _ensure_repos_ready(repos: List[str], allow_incremental: bool = True, ctx=None) -> List[str]:
     """
     For each repo source string:
@@ -140,25 +217,100 @@ def _ensure_repos_ready(repos: List[str], allow_incremental: bool = True, ctx=No
     _apply_forced_env_excludes(fc)
     ready_names: List[str] = []
 
+    def strip_repo_hash_suffix(repo_name: str) -> Optional[str]:
+        base_name, sep, suffix = repo_name.rpartition("-")
+        if not sep or len(suffix) != 8:
+            return None
+        if not all(ch in "0123456789abcdef" for ch in suffix.lower()):
+            return None
+        return base_name or None
+
+    def find_legacy_local_collisions(source: str, resolved_name: str) -> List[str]:
+        try:
+            from fastcode.utils import get_repo_name_from_path
+        except Exception:
+            return []
+
+        workspace_root = getattr(getattr(fc, "loader", None), "safe_repo_root", None)
+        derived_name = get_repo_name_from_path(source, workspace_root=workspace_root)
+        legacy_name = strip_repo_hash_suffix(derived_name)
+        if not legacy_name or resolved_name != legacy_name or resolved_name == derived_name:
+            return []
+
+        source_path = os.path.abspath(source)
+        parent_dir = os.path.dirname(source_path)
+        search_root = os.path.dirname(parent_dir)
+        if not search_root or search_root == parent_dir or search_root == os.path.sep:
+            return []
+
+        basename = os.path.basename(source_path.rstrip(os.sep))
+        candidates = set()
+
+        direct_candidate = os.path.join(search_root, basename)
+        if os.path.isdir(direct_candidate):
+            candidates.add(os.path.abspath(direct_candidate))
+
+        try:
+            for child in os.listdir(search_root):
+                candidate = os.path.join(search_root, child, basename)
+                if os.path.isdir(candidate):
+                    candidates.add(os.path.abspath(candidate))
+        except OSError:
+            return []
+
+        return sorted(candidates) if len(candidates) > 1 else []
+
     for source in repos:
         resolved_is_url = fc._infer_is_url(source)
         name = _repo_name_from_source(source, resolved_is_url)
+        abs_path = os.path.abspath(source) if not resolved_is_url else None
 
         # Already indexed
         if _is_repo_indexed(name):
+            if not resolved_is_url and not os.path.isdir(abs_path):
+                logger.error(f"Local path does not exist: {abs_path}")
+                continue
+
+            if not resolved_is_url:
+                collision_paths = find_legacy_local_collisions(abs_path, name)
+                if collision_paths:
+                    logger.error(
+                        "Legacy local index '%s' is ambiguous for '%s'; matching paths=%s",
+                        name,
+                        abs_path,
+                        collision_paths,
+                    )
+                    continue
+
             # Try incremental update for local repos
             if not resolved_is_url and allow_incremental:
-                abs_path = os.path.abspath(source)
-                if os.path.isdir(abs_path):
-                    try:
-                        result = fc.incremental_reindex(name, repo_path=abs_path)
-                        if result and result.get("changes", 0) > 0:
-                            logger.info(f"Incremental update for '{name}': {result}")
-                            # Force reload since on-disk data changed
-                            fc.repo_indexed = False
-                            fc.loaded_repositories.clear()
-                    except Exception as e:
-                        logger.warning(f"Incremental reindex failed for '{name}': {e}")
+                force_full_reindex = False
+                try:
+                    result = fc.incremental_reindex(name, repo_path=abs_path)
+                    status = (result or {}).get("status")
+                    if status in {
+                        "no_manifest",
+                        "no_metadata",
+                        "embedding_mismatch",
+                        "embedding_dimension_mismatch",
+                        "full_reindex_required",
+                    }:
+                        force_full_reindex = True
+                    elif result and result.get("changes", 0) > 0:
+                        logger.info(f"Incremental update for '{name}': {result}")
+                        _invalidate_loaded_state(fc)
+                except Exception as e:
+                    logger.warning(f"Incremental reindex failed for '{name}': {e}")
+                    force_full_reindex = True
+
+                if force_full_reindex:
+                    logger.info(f"Falling back to full reindex for '{name}'")
+                    result = _run_full_reindex(
+                        abs_path, resolved_is_url=False, repo_name=name
+                    )
+                    if result.get("status") != "success":
+                        logger.error(f"Full reindex failed for '{name}': {result}")
+                        continue
             logger.info(f"Repo '{name}' ready.")
             ready_names.append(name)
             continue
@@ -190,7 +342,35 @@ def _ensure_loaded(fc, ready_names: List[str]) -> bool:
     """Ensure repos are loaded into memory (vectors + BM25 + graphs)."""
     if not fc.repo_indexed or set(ready_names) != set(fc.loaded_repositories.keys()):
         logger.info(f"Loading repos into memory: {ready_names}")
-        return fc._load_multi_repo_cache(repo_names=ready_names)
+        if not fc._load_multi_repo_cache(repo_names=ready_names):
+            return False
+
+    loaded_names = set(fc.loaded_repositories.keys())
+    expected_names = set(ready_names)
+    if loaded_names != expected_names:
+        logger.error(
+            "Loaded repository set mismatch. expected=%s loaded=%s",
+            sorted(expected_names),
+            sorted(loaded_names),
+        )
+        return False
+
+    vector_store = getattr(fc, "vector_store", None)
+    if vector_store is not None and hasattr(vector_store, "get_count"):
+        if vector_store.get_count() == 0:
+            logger.error("Repository load finished with an empty in-memory vector store")
+            return False
+
+    if vector_store is not None and hasattr(vector_store, "get_repository_names"):
+        in_memory_names = set(vector_store.get_repository_names())
+        if in_memory_names != expected_names:
+            logger.error(
+                "In-memory repository set mismatch. expected=%s loaded=%s",
+                sorted(expected_names),
+                sorted(in_memory_names),
+            )
+            return False
+
     return True
 
 
@@ -439,7 +619,7 @@ def search_symbol(
         Matching definitions with file path, line range, and signature.
     """
     fc = _get_fastcode()
-    ready_names = _ensure_repos_ready(repos, allow_incremental=False)
+    ready_names = _ensure_repos_ready(repos)
     if not ready_names:
         return "Error: None of the specified repositories could be loaded."
     if not _ensure_loaded(fc, ready_names):
@@ -542,7 +722,7 @@ def get_file_summary(file_path: str, repos: list[str]) -> str:
         File structure: classes (with methods), top-level functions, and import count.
     """
     fc = _get_fastcode()
-    ready_names = _ensure_repos_ready(repos, allow_incremental=False)
+    ready_names = _ensure_repos_ready(repos)
     if not ready_names:
         return "Error: None of the specified repositories could be loaded."
     if not _ensure_loaded(fc, ready_names):
@@ -649,7 +829,7 @@ def get_call_chain(
         Formatted call chain showing callers and/or callees.
     """
     fc = _get_fastcode()
-    ready_names = _ensure_repos_ready(repos, allow_incremental=False)
+    ready_names = _ensure_repos_ready(repos)
     if not ready_names:
         return "Error: None of the specified repositories could be loaded."
     if not _ensure_loaded(fc, ready_names):
@@ -712,28 +892,16 @@ def reindex_repo(repo_source: str) -> str:
         Confirmation with element count.
     """
     fc = _get_fastcode()
-    _apply_forced_env_excludes(fc)
-
     resolved_is_url = fc._infer_is_url(repo_source)
     name = _repo_name_from_source(repo_source, resolved_is_url)
     logger.info(f"Force re-indexing '{name}' from {repo_source}")
+    result = _run_full_reindex(repo_source, resolved_is_url, repo_name=name)
+    if result.get("status") == "path_not_found":
+        return f"Error: Local path does not exist: {result['path']}"
+    if result.get("status") != "success":
+        return f"Error: Failed to re-index '{name}'."
 
-    if resolved_is_url:
-        fc.load_repository(repo_source, is_url=True)
-    else:
-        abs_path = os.path.abspath(repo_source)
-        if not os.path.isdir(abs_path):
-            return f"Error: Local path does not exist: {abs_path}"
-        fc.load_repository(abs_path, is_url=False)
-
-    fc.index_repository(force=True)
-    count = fc.vector_store.get_count()
-
-    # Reset in-memory state so next _ensure_loaded does a clean load
-    fc.repo_indexed = False
-    fc.loaded_repositories.clear()
-
-    return f"Successfully re-indexed '{name}': {count} elements indexed."
+    return f"Successfully re-indexed '{name}': {result['count']} elements indexed."
 
 
 # ---------------------------------------------------------------------------
