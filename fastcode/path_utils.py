@@ -258,8 +258,14 @@ class PathUtils:
             if resolved is None:
                 # Also check if the joined path would be safe (even if doesn't exist yet)
                 abs_path = os.path.abspath(os.path.join(self.repo_root, path))
-                return abs_path.startswith(self.repo_root)
-            return resolved.startswith(self.repo_root)
+            else:
+                abs_path = resolved
+            # Require an exact match or a path-separator boundary, so a sibling
+            # directory that merely shares the repo-root name prefix (e.g.
+            # "myrepo_secrets" vs "myrepo") or a "../" escape onto it is not
+            # treated as inside the repository.
+            return (abs_path == self.repo_root
+                    or abs_path.startswith(self.repo_root + os.sep))
         except Exception as e:
             self.logger.warning(f"Path security check failed for {path}: {e}")
             return False
