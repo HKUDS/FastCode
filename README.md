@@ -1009,11 +1009,11 @@ If FastCode saves you tokens and time, consider giving us a star! ⭐
 </div>
 
 <div align="center">
-  <a href="https://star-history.com/#HKUDS/FastCode&Date">
+  <a href="https://star-history.dera.page/#HKUDS/FastCode&type=Date">
     <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=HKUDS/FastCode&type=Date&theme=dark" />
-      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=HKUDS/FastCode&type=Date" />
-      <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=HKUDS/FastCode&type=Date" style="border-radius: 15px; box-shadow: 0 0 30px rgba(0, 217, 255, 0.3);" />
+      <source media="(prefers-color-scheme: dark)" srcset="https://star-history.dera.page/svg?repos=HKUDS/FastCode&type=Date&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://star-history.dera.page/svg?repos=HKUDS/FastCode&type=Date" />
+      <img alt="Star History Chart" src="https://star-history.dera.page/svg?repos=HKUDS/FastCode&type=Date" style="border-radius: 15px; box-shadow: 0 0 30px rgba(0, 217, 255, 0.3);" />
     </picture>
   </a>
 </div>
