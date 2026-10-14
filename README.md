@@ -706,6 +706,16 @@ BASE_URL=https://openrouter.ai/api/v1
 </details>
 
 <details>
+<summary><b>Cheaper Inference (Multiple Models)</b></summary>
+
+```env
+OPENAI_API_KEY=ci_live_...
+MODEL=gpt-5.4-mini
+BASE_URL=https://api.cheaperinference.com/v1
+```
+</details>
+
+<details>
 <summary><b>Local Models (Ollama)</b></summary>
 
 ```env
