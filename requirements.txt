@@ -51,8 +51,8 @@ pathspec
 diskcache
 redis
 
-# MCP Server
-mcp[cli]
+# MCP Server (FastMCP's import path is part of MCP SDK v1; SDK v2 removed it)
+mcp[cli]<2
 
 # Testing
 pytest
