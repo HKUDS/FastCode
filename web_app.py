@@ -30,6 +30,7 @@ import shutil
 import uuid
 
 from fastcode import FastCode
+from fastcode.upload_utils import ensure_within_directory, sanitize_upload_filename
 
 
 # Pydantic models
@@ -340,8 +341,14 @@ async def upload_repository_zip(file: UploadFile = File(...)):
     if fastcode_instance is None:
         raise HTTPException(status_code=500, detail="FastCode not initialized")
     
+    # The file name is chosen by the client: only use its last component
+    try:
+        upload_name = sanitize_upload_filename(file.filename)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file name")
+
     # Validate file type
-    if not file.filename.endswith('.zip'):
+    if not upload_name.endswith('.zip'):
         raise HTTPException(status_code=400, detail="Only ZIP files are supported")
     
     # Check file size (100MB limit)
@@ -355,7 +362,7 @@ async def upload_repository_zip(file: UploadFile = File(...)):
     
     try:
         # Extract repository name from ZIP filename (remove .zip extension)
-        repo_name = file.filename.rsplit('.', 1)[0]
+        repo_name = upload_name.rsplit('.', 1)[0]
         # Clean repository name (remove common suffixes like -main, -master)
         for suffix in ['-main', '-master', '_main', '_master']:
             if repo_name.endswith(suffix):
@@ -368,17 +375,21 @@ async def upload_repository_zip(file: UploadFile = File(...)):
         repos_dir.mkdir(parents=True, exist_ok=True)
         
         # Target repository path in repos directory
-        repo_path = repos_dir / repo_name
-        
+        try:
+            # Also rejects an empty name (e.g. "-main.zip"), which would be the repos directory itself
+            repo_path = ensure_within_directory(repos_dir, repos_dir / repo_name)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid repository name")
+
         # Backup existing repository before overwrite
         if repo_path.exists():
             fastcode_instance.loader._backup_existing_repo(str(repo_path))
         
         # Create temporary directory for ZIP extraction
         temp_dir = tempfile.mkdtemp(prefix="fastcode_upload_")
-        zip_path = Path(temp_dir) / file.filename
-        
-        logger.info(f"Saving uploaded ZIP file: {file.filename} ({file_size} bytes)")
+        zip_path = Path(temp_dir) / upload_name
+
+        logger.info(f"Saving uploaded ZIP file: {upload_name} ({file_size} bytes)")
         
         # Save uploaded file to temp directory
         with open(zip_path, "wb") as buffer:
@@ -416,11 +427,13 @@ async def upload_repository_zip(file: UploadFile = File(...)):
         
         return {
             "status": "success",
-            "message": f"ZIP file '{file.filename}' uploaded and extracted to repos/{repo_name}",
+            "message": f"ZIP file '{upload_name}' uploaded and extracted to repos/{repo_name}",
             "repo_info": fastcode_instance.repo_info,
             "repo_path": str(repo_path),
         }
-    
+
+    except HTTPException:
+        raise
     except zipfile.BadZipFile:
         logger.error("Invalid ZIP file")
         raise HTTPException(status_code=400, detail="Invalid ZIP file")
